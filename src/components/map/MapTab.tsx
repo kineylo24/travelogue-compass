@@ -148,7 +148,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   };
 
   return (
-    <div className="h-screen bg-background relative overflow-hidden">
+    <div className="h-[calc(100vh-4rem)] bg-background relative overflow-hidden pb-safe">
       <LeafletMap
         ref={mapRef}
         isRouting={isRouting}
@@ -176,7 +176,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Viewing route info */}
       {viewingRoute && (
-        <div className="absolute bottom-24 left-4 right-4 z-[1100]">
+        <div className="absolute bottom-8 left-4 right-4 z-[1100]">
           <div className="ios-card-lg p-4">
             <h3 className="font-semibold text-foreground mb-1">{viewingRoute.name}</h3>
             <p className="text-sm text-muted-foreground mb-3">{viewingRoute.city} • {viewingRoute.date}</p>
@@ -293,7 +293,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Transport type selector when routing */}
       {isRouting && (
-        <div className="absolute bottom-24 left-4 right-4 z-[1100] animate-slide-up">
+        <div className="absolute bottom-8 left-4 right-4 z-[1100] animate-slide-up">
           <div className="ios-card-lg p-4">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag, Check, ArrowLeft, Camera, Play, Image as ImageIcon, Trash2, Edit2 } from "lucide-react";
-import YandexMap, { YandexMapRef } from "./YandexMap";
+import LeafletMap, { LeafletMapRef } from "./LeafletMap";
 import { useRoutes, SavedRoute, RoutePoint } from "@/contexts/RoutesContext";
 import { Destination } from "@/types/routes";
 import {
@@ -38,7 +38,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const [showMediaDialog, setShowMediaDialog] = useState(false);
   const [mediaCaption, setMediaCaption] = useState("");
   
-  const mapRef = useRef<YandexMapRef>(null);
+  const mapRef = useRef<LeafletMapRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const transportOptions = [
@@ -134,7 +134,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
   return (
     <div className="min-h-screen bg-background relative">
-      <YandexMap
+      <LeafletMap
         ref={mapRef}
         isRouting={isRouting}
         transportType={transportType}

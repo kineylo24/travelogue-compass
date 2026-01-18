@@ -66,27 +66,38 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
   
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [tilesError, setTilesError] = useState(false);
 
-  // Initialize map
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+
+  // Initialize map (сразу, без ожидания геолокации)
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
-        setUserLocation(coords);
-        initMap(coords);
-      },
-      () => {
-        const defaultCoords: [number, number] = [55.751574, 37.573856]; // Moscow
-        setUserLocation(defaultCoords);
-        initMap(defaultCoords);
-      },
-      { enableHighAccuracy: true }
-    );
+    const defaultCoords: [number, number] = [55.751574, 37.573856]; // Moscow
+    setUserLocation(defaultCoords);
+    initMap(defaultCoords);
+
+    // Затем пробуем уточнить положение пользователя
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
+          setUserLocation(coords);
+          if (userMarkerRef.current) userMarkerRef.current.setLatLng(coords);
+          mapRef.current?.setView(coords, 15, { animate: true, duration: 0.4 });
+        },
+        (err) => {
+          console.warn("[LeafletMap] getCurrentPosition error:", err);
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 2000 }
+      );
+    }
 
     function initMap(coords: [number, number]) {
       if (!mapContainerRef.current) return;
+
+      console.log("[LeafletMap] initMap", coords);
 
       mapRef.current = L.map(mapContainerRef.current, {
         center: coords,
@@ -94,10 +105,16 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
         zoomControl: false,
       });
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>',
         maxZoom: 19,
-      }).addTo(mapRef.current);
+      });
+
+      tileLayer.on("load", () => setTilesError(false));
+      tileLayer.on("tileerror", () => setTilesError(true));
+
+      tileLayer.addTo(mapRef.current);
+      tileLayerRef.current = tileLayer;
 
       L.control.zoom({ position: "bottomright" }).addTo(mapRef.current);
 
@@ -112,7 +129,7 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
       userMarkerRef.current = L.marker(coords, { icon: userIcon }).addTo(mapRef.current);
       setIsMapLoaded(true);
 
-      // Leaflet иногда рендерит «пусто», если контейнер только что появился — форсим перерасчёт размеров
+      // Форсим перерасчёт размеров
       requestAnimationFrame(() => {
         mapRef.current?.invalidateSize();
         setTimeout(() => mapRef.current?.invalidateSize(), 200);
@@ -133,7 +150,6 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
     const invalidate = () => mapRef.current?.invalidateSize();
     window.addEventListener("resize", invalidate);
 
-    // небольшая задержка на всякий случай (переключение табов/анимации)
     const t = window.setTimeout(invalidate, 100);
 
     return () => {

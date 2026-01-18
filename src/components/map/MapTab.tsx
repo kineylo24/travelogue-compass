@@ -134,7 +134,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   };
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <div className="h-screen bg-background relative overflow-hidden">
       <LeafletMap
         ref={mapRef}
         isRouting={isRouting}
@@ -149,7 +149,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Back button when viewing route */}
       {viewingRoute && (
-        <div className="absolute top-4 left-4 z-10">
+        <div className="absolute top-4 left-4 z-[1100]">
           <button
             onClick={onBackFromRoute}
             className="map-button flex items-center gap-2"
@@ -162,7 +162,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Viewing route info */}
       {viewingRoute && (
-        <div className="absolute bottom-24 left-4 right-4 z-10">
+        <div className="absolute bottom-24 left-4 right-4 z-[1100]">
           <div className="ios-card-lg p-4">
             <h3 className="font-semibold text-foreground mb-1">{viewingRoute.name}</h3>
             <p className="text-sm text-muted-foreground mb-3">{viewingRoute.city} • {viewingRoute.date}</p>
@@ -183,7 +183,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Floating search bar */}
       {!viewingRoute && (
-        <div className="absolute top-4 left-4 right-4 safe-area-inset-top z-10">
+        <div className="absolute top-4 left-4 right-4 safe-area-inset-top z-[1100]">
           <button
             onClick={() => setShowSearch(true)}
             className="w-full map-button flex items-center gap-3"
@@ -206,7 +206,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Destination info card */}
       {destination && destinationInfo && !isRouting && !viewingRoute && (
-        <div className="absolute top-20 left-4 right-4 z-10">
+        <div className="absolute top-20 left-4 right-4 z-[1100]">
           <div className="ios-card-lg p-4">
             <div className="flex items-start justify-between mb-3">
               <div>
@@ -254,7 +254,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Start/End route button */}
       {!viewingRoute && (
-        <div className="absolute top-20 right-4 z-10" style={{ top: destination && destinationInfo ? "auto" : undefined, bottom: destination && destinationInfo ? undefined : undefined }}>
+        <div className="absolute top-20 right-4 z-[1100]">
           {!destination && (
             !isRouting ? (
               <button
@@ -279,7 +279,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Transport type selector when routing */}
       {isRouting && (
-        <div className="absolute bottom-24 left-4 right-4 z-10 animate-slide-up">
+        <div className="absolute bottom-24 left-4 right-4 z-[1100] animate-slide-up">
           <div className="ios-card-lg p-4">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />

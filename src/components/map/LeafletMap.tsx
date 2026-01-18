@@ -87,7 +87,7 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
 
     function initMap(coords: [number, number]) {
       if (!mapContainerRef.current) return;
-      
+
       mapRef.current = L.map(mapContainerRef.current, {
         center: coords,
         zoom: 15,
@@ -111,6 +111,12 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
 
       userMarkerRef.current = L.marker(coords, { icon: userIcon }).addTo(mapRef.current);
       setIsMapLoaded(true);
+
+      // Leaflet иногда рендерит «пусто», если контейнер только что появился — форсим перерасчёт размеров
+      requestAnimationFrame(() => {
+        mapRef.current?.invalidateSize();
+        setTimeout(() => mapRef.current?.invalidateSize(), 200);
+      });
     }
 
     return () => {
@@ -120,6 +126,21 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!isMapLoaded || !mapRef.current) return;
+
+    const invalidate = () => mapRef.current?.invalidateSize();
+    window.addEventListener("resize", invalidate);
+
+    // небольшая задержка на всякий случай (переключение табов/анимации)
+    const t = window.setTimeout(invalidate, 100);
+
+    return () => {
+      window.removeEventListener("resize", invalidate);
+      window.clearTimeout(t);
+    };
+  }, [isMapLoaded]);
 
   // Search places using Nominatim
   const searchPlaces = useCallback(async (query: string): Promise<{ name: string; address: string; coordinates: [number, number] }[]> => {

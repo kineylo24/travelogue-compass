@@ -385,9 +385,9 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                   <h3 className="text-sm font-semibold text-muted-foreground mb-3">Популярные места</h3>
                   <div className="space-y-2">
                     {[
-                      { name: "Красная площадь", address: "Москва, Россия", coordinates: [55.7539, 37.6208] as [number, number] },
-                      { name: "Эрмитаж", address: "Санкт-Петербург, Россия", coordinates: [59.9398, 30.3146] as [number, number] },
-                      { name: "Парк Горького", address: "Москва, Россия", coordinates: [55.7312, 37.6032] as [number, number] },
+                      { name: "Красная площадь", address: "Москва, Россия", coordinates: [37.6208, 55.7539] as [number, number] },
+                      { name: "Эрмитаж", address: "Санкт-Петербург, Россия", coordinates: [30.3146, 59.9398] as [number, number] },
+                      { name: "Парк Горького", address: "Москва, Россия", coordinates: [37.6032, 55.7312] as [number, number] },
                     ].map((place, i) => (
                       <button 
                         key={i}
@@ -459,7 +459,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Media dialog for route point */}
       <Dialog open={showMediaDialog} onOpenChange={setShowMediaDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[70vh] overflow-y-auto z-[10000]">
           <DialogHeader>
             <DialogTitle>Медиа для точки маршрута</DialogTitle>
           </DialogHeader>

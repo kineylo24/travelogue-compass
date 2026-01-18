@@ -1,15 +1,45 @@
-import { useState } from "react";
-import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag } from "lucide-react";
-import YandexMap from "./YandexMap";
+import { useState, useRef, useCallback } from "react";
+import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag, Check, ArrowLeft, Camera, Play, Image as ImageIcon, Trash2, Edit2 } from "lucide-react";
+import YandexMap, { YandexMapRef } from "./YandexMap";
+import { useRoutes, SavedRoute, RoutePoint } from "@/contexts/RoutesContext";
+import { Destination } from "@/types/routes";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type TransportType = "walk" | "bike" | "car" | "transit";
 
-const MapTab = () => {
+interface MapTabProps {
+  onViewRoute?: (route: SavedRoute) => void;
+  viewingRoute?: SavedRoute | null;
+  onBackFromRoute?: () => void;
+}
+
+const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => {
+  const { stopRecording, routes, addMediaToPoint, updateRoute } = useRoutes();
+  
   const [isRouting, setIsRouting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [transportType, setTransportType] = useState<TransportType>("walk");
   const [distance, setDistance] = useState(0);
   const [time, setTime] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ name: string; address: string; coordinates: [number, number] }[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [destination, setDestination] = useState<Destination | null>(null);
+  const [destinationInfo, setDestinationInfo] = useState<{ distance: number; duration: number } | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [routeName, setRouteName] = useState("");
+  const [routeCity, setRouteCity] = useState("");
+  const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
+  const [showMediaDialog, setShowMediaDialog] = useState(false);
+  const [mediaCaption, setMediaCaption] = useState("");
+  
+  const mapRef = useRef<YandexMapRef>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const transportOptions = [
     { id: "walk" as TransportType, icon: Footprints, label: "Пешком" },
@@ -22,54 +52,226 @@ const MapTab = () => {
     setIsRouting(true);
     setDistance(0);
     setTime(0);
+    setDestination(null);
+    setDestinationInfo(null);
   };
 
   const handleEndRoute = () => {
     setIsRouting(false);
-    // Here you could save the route to "My Maps"
+    setShowSaveDialog(true);
+  };
+
+  const handleSaveRoute = () => {
+    const savedRoute = stopRecording();
+    if (savedRoute && (routeName || routeCity)) {
+      updateRoute(savedRoute.id, {
+        name: routeName || savedRoute.name,
+        city: routeCity || savedRoute.city,
+        transportType,
+      });
+    }
+    setShowSaveDialog(false);
+    setRouteName("");
+    setRouteCity("");
+  };
+
+  const handleSearch = useCallback(async (query: string) => {
+    if (!query.trim() || !mapRef.current) return;
+    
+    setIsSearching(true);
+    const results = await mapRef.current.searchPlaces(query);
+    setSearchResults(results);
+    setIsSearching(false);
+  }, []);
+
+  const handleSelectDestination = (result: { name: string; address: string; coordinates: [number, number] }) => {
+    setDestination({
+      name: result.name,
+      address: result.address,
+      coordinates: result.coordinates,
+    });
+    setShowSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  };
+
+  const handleDestinationRouteReady = (dist: number, dur: number) => {
+    setDestinationInfo({ distance: dist, duration: dur });
+  };
+
+  const handleClearDestination = () => {
+    setDestination(null);
+    setDestinationInfo(null);
+    mapRef.current?.clearDestinationRoute();
+  };
+
+  const handlePointClick = (point: RoutePoint) => {
+    setSelectedPoint(point);
+    setShowMediaDialog(true);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPoint || !viewingRoute) return;
+
+    const url = URL.createObjectURL(file);
+    const type = file.type.startsWith("video") ? "video" : "photo";
+    
+    addMediaToPoint(viewingRoute.id, selectedPoint.id, {
+      type,
+      url,
+      caption: mediaCaption,
+    });
+    
+    setMediaCaption("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Yandex Map */}
       <YandexMap
+        ref={mapRef}
         isRouting={isRouting}
         transportType={transportType}
         onDistanceUpdate={setDistance}
         onTimeUpdate={setTime}
+        destination={destination}
+        onDestinationRouteReady={handleDestinationRouteReady}
+        viewingRoute={viewingRoute}
+        onPointClick={handlePointClick}
       />
 
+      {/* Back button when viewing route */}
+      {viewingRoute && (
+        <div className="absolute top-4 left-4 z-10">
+          <button
+            onClick={onBackFromRoute}
+            className="map-button flex items-center gap-2"
+          >
+            <ArrowLeft size={18} />
+            <span>Назад</span>
+          </button>
+        </div>
+      )}
+
+      {/* Viewing route info */}
+      {viewingRoute && (
+        <div className="absolute bottom-24 left-4 right-4 z-10">
+          <div className="ios-card-lg p-4">
+            <h3 className="font-semibold text-foreground mb-1">{viewingRoute.name}</h3>
+            <p className="text-sm text-muted-foreground mb-3">{viewingRoute.city} • {viewingRoute.date}</p>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Расстояние</span>
+              <span className="font-semibold text-foreground">{viewingRoute.distance} км</span>
+            </div>
+            <div className="flex justify-between text-sm mt-1">
+              <span className="text-muted-foreground">Время</span>
+              <span className="font-semibold text-foreground">{viewingRoute.duration} мин</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Нажмите на точку маршрута, чтобы добавить фото или видео
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Floating search bar */}
-      <div className="absolute top-4 left-4 right-4 safe-area-inset-top z-10">
-        <button
-          onClick={() => setShowSearch(true)}
-          className="w-full map-button flex items-center gap-3"
-        >
-          <Search size={18} className="text-muted-foreground" />
-          <span className="text-muted-foreground">Куда вы хотите пойти?</span>
-        </button>
-      </div>
+      {!viewingRoute && (
+        <div className="absolute top-4 left-4 right-4 safe-area-inset-top z-10">
+          <button
+            onClick={() => setShowSearch(true)}
+            className="w-full map-button flex items-center gap-3"
+          >
+            <Search size={18} className="text-muted-foreground" />
+            <span className="text-muted-foreground">
+              {destination ? destination.name : "Куда вы хотите пойти?"}
+            </span>
+            {destination && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleClearDestination(); }}
+                className="ml-auto p-1"
+              >
+                <X size={16} className="text-muted-foreground" />
+              </button>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Destination info card */}
+      {destination && destinationInfo && !isRouting && !viewingRoute && (
+        <div className="absolute top-20 left-4 right-4 z-10">
+          <div className="ios-card-lg p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div>
+                <h3 className="font-semibold text-foreground">{destination.name}</h3>
+                <p className="text-sm text-muted-foreground">{destination.address}</p>
+              </div>
+              <button 
+                onClick={handleClearDestination}
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex gap-4 text-sm mb-3">
+              <div>
+                <span className="text-muted-foreground">Расстояние: </span>
+                <span className="font-semibold text-foreground">{destinationInfo.distance.toFixed(1)} км</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Время: </span>
+                <span className="font-semibold text-foreground">{destinationInfo.duration} мин</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {transportOptions.map((option) => {
+                const Icon = option.icon;
+                const isActive = transportType === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => setTransportType(option.id)}
+                    className={`flex-1 py-2 rounded-xl flex flex-col items-center gap-1 transition-all ${
+                      isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    <Icon size={18} />
+                    <span className="text-xs">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Start/End route button */}
-      <div className="absolute top-20 right-4 z-10">
-        {!isRouting ? (
-          <button
-            onClick={handleStartRoute}
-            className="map-button gradient-primary text-primary-foreground flex items-center gap-2"
-          >
-            <Navigation size={18} />
-            <span>Начать маршрут</span>
-          </button>
-        ) : (
-          <button
-            onClick={handleEndRoute}
-            className="map-button bg-destructive text-destructive-foreground flex items-center gap-2"
-          >
-            <Flag size={18} />
-            <span>Завершить</span>
-          </button>
-        )}
-      </div>
+      {!viewingRoute && (
+        <div className="absolute top-20 right-4 z-10" style={{ top: destination && destinationInfo ? "auto" : undefined, bottom: destination && destinationInfo ? undefined : undefined }}>
+          {!destination && (
+            !isRouting ? (
+              <button
+                onClick={handleStartRoute}
+                className="map-button gradient-primary text-primary-foreground flex items-center gap-2"
+              >
+                <Navigation size={18} />
+                <span>Начать маршрут</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleEndRoute}
+                className="map-button bg-destructive text-destructive-foreground flex items-center gap-2"
+              >
+                <Flag size={18} />
+                <span>Завершить</span>
+              </button>
+            )
+          )}
+        </div>
+      )}
 
       {/* Transport type selector when routing */}
       {isRouting && (
@@ -121,44 +323,191 @@ const MapTab = () => {
                 <input
                   type="text"
                   placeholder="Поиск места"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    if (e.target.value.length > 2) {
+                      handleSearch(e.target.value);
+                    }
+                  }}
                   className="bg-transparent flex-1 outline-none text-foreground placeholder:text-muted-foreground"
                   autoFocus
                 />
               </div>
-              <button onClick={() => setShowSearch(false)} className="p-2">
+              <button onClick={() => { setShowSearch(false); setSearchQuery(""); setSearchResults([]); }} className="p-2">
                 <X size={24} className="text-foreground" />
               </button>
             </div>
             
             <div className="mt-6">
-              <h3 className="text-sm font-semibold text-muted-foreground mb-3">Популярные места</h3>
-              <div className="space-y-2">
-                {[
-                  { name: "Саграда Фамилия", address: "Carrer de Mallorca, 401" },
-                  { name: "Парк Гуэль", address: "Carrer d'Olot, s/n" },
-                  { name: "Дом Бальо", address: "Passeig de Gràcia, 43" },
-                ].map((place, i) => (
-                  <button 
-                    key={i}
-                    onClick={() => setShowSearch(false)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
-                  >
-                    <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center">
-                      <MapPin size={18} className="text-accent-foreground" />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-medium text-foreground">{place.name}</p>
-                      <p className="text-sm text-muted-foreground">{place.address}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
+              {isSearching ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : searchResults.length > 0 ? (
+                <div className="space-y-2">
+                  {searchResults.map((result, i) => (
+                    <button 
+                      key={i}
+                      onClick={() => handleSelectDestination(result)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                    >
+                      <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center">
+                        <MapPin size={18} className="text-accent-foreground" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-foreground">{result.name}</p>
+                        <p className="text-sm text-muted-foreground">{result.address}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <h3 className="text-sm font-semibold text-muted-foreground mb-3">Популярные места</h3>
+                  <div className="space-y-2">
+                    {[
+                      { name: "Красная площадь", address: "Москва, Россия", coordinates: [55.7539, 37.6208] as [number, number] },
+                      { name: "Эрмитаж", address: "Санкт-Петербург, Россия", coordinates: [59.9398, 30.3146] as [number, number] },
+                      { name: "Парк Горького", address: "Москва, Россия", coordinates: [55.7312, 37.6032] as [number, number] },
+                    ].map((place, i) => (
+                      <button 
+                        key={i}
+                        onClick={() => handleSelectDestination(place)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                      >
+                        <div className="w-10 h-10 bg-accent rounded-xl flex items-center justify-center">
+                          <MapPin size={18} className="text-accent-foreground" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium text-foreground">{place.name}</p>
+                          <p className="text-sm text-muted-foreground">{place.address}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Map markers - removed since we have real user location now */}
+      {/* Save route dialog */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Сохранить маршрут</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">Название маршрута</label>
+              <input
+                type="text"
+                value={routeName}
+                onChange={(e) => setRouteName(e.target.value)}
+                placeholder="Например: Прогулка по центру"
+                className="w-full bg-muted rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">Город</label>
+              <input
+                type="text"
+                value={routeCity}
+                onChange={(e) => setRouteCity(e.target.value)}
+                placeholder="Например: Москва"
+                className="w-full bg-muted rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setShowSaveDialog(false)}
+                className="flex-1 py-3 rounded-xl bg-muted text-foreground font-medium"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleSaveRoute}
+                className="flex-1 py-3 rounded-xl gradient-primary text-primary-foreground font-medium flex items-center justify-center gap-2"
+              >
+                <Check size={18} />
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Media dialog for route point */}
+      <Dialog open={showMediaDialog} onOpenChange={setShowMediaDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Медиа для точки маршрута</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedPoint?.media && selectedPoint.media.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-sm font-medium mb-2">Прикреплённые медиа</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {selectedPoint.media.map((m, idx) => (
+                    <div key={idx} className="aspect-square rounded-lg overflow-hidden relative">
+                      {m.type === "photo" ? (
+                        <img src={m.url} alt={m.caption || ""} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                          <Play size={24} className="text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div>
+              <label className="text-sm text-muted-foreground mb-1 block">Добавить подпись</label>
+              <input
+                type="text"
+                value={mediaCaption}
+                onChange={(e) => setMediaCaption(e.target.value)}
+                placeholder="Описание фото или видео"
+                className="w-full bg-muted rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary mb-3"
+              />
+            </div>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            
+            <div className="flex gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 py-3 rounded-xl bg-accent text-accent-foreground font-medium flex items-center justify-center gap-2"
+              >
+                <Camera size={18} />
+                Добавить фото
+              </button>
+              <button
+                onClick={() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.accept = "video/*";
+                    fileInputRef.current.click();
+                  }
+                }}
+                className="flex-1 py-3 rounded-xl bg-accent text-accent-foreground font-medium flex items-center justify-center gap-2"
+              >
+                <Play size={18} />
+                Добавить видео
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

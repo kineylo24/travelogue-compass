@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useRoutes, RoutePoint, SavedRoute } from "@/contexts/RoutesContext";
+import { Destination } from "@/types/routes";
 
 declare global {
   interface Window {
@@ -11,16 +13,40 @@ interface YandexMapProps {
   transportType: string;
   onDistanceUpdate: (distance: number) => void;
   onTimeUpdate: (time: number) => void;
+  destination?: Destination | null;
+  onDestinationRouteReady?: (distance: number, duration: number) => void;
+  viewingRoute?: SavedRoute | null;
+  onPointClick?: (point: RoutePoint) => void;
+}
+
+export interface YandexMapRef {
+  searchPlaces: (query: string) => Promise<{ name: string; address: string; coordinates: [number, number] }[]>;
+  clearDestinationRoute: () => void;
+  getRoutePoints: () => RoutePoint[];
 }
 
 const YANDEX_API_KEY = "499a1ddf-9da3-4fee-bf16-5aca0630d9dc";
 
-const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }: YandexMapProps) => {
+const YandexMap = forwardRef<YandexMapRef, YandexMapProps>(({
+  isRouting,
+  transportType,
+  onDistanceUpdate,
+  onTimeUpdate,
+  destination,
+  onDestinationRouteReady,
+  viewingRoute,
+  onPointClick,
+}, ref) => {
+  const { addPointToCurrentRoute } = useRoutes();
+  
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
   const userPlacemarkRef = useRef<any>(null);
-  const routePointsRef = useRef<[number, number][]>([]);
+  const destinationPlacemarkRef = useRef<any>(null);
+  const destinationRouteRef = useRef<any>(null);
+  const routePointsRef = useRef<RoutePoint[]>([]);
+  const viewingRouteObjectsRef = useRef<any[]>([]);
   const watchIdRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -54,7 +80,6 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
   useEffect(() => {
     if (!isMapLoaded || !mapContainerRef.current || mapRef.current) return;
 
-    // Get user's current location
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
@@ -66,7 +91,6 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
           controls: ["zoomControl"],
         });
 
-        // Add user placemark
         userPlacemarkRef.current = new window.ymaps.Placemark(
           coords,
           {},
@@ -78,7 +102,6 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
         mapRef.current.geoObjects.add(userPlacemarkRef.current);
       },
       () => {
-        // Default to Moscow if geolocation fails
         const defaultCoords: [number, number] = [55.751574, 37.573856];
         setUserLocation(defaultCoords);
         
@@ -99,41 +122,192 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
     };
   }, [isMapLoaded]);
 
-  // Calculate distance between two points
-  const calculateDistance = useCallback((points: [number, number][]) => {
-    if (points.length < 2) return 0;
+  // Search places
+  const searchPlaces = useCallback(async (query: string): Promise<{ name: string; address: string; coordinates: [number, number] }[]> => {
+    if (!isMapLoaded || !window.ymaps) return [];
     
-    let totalDistance = 0;
-    for (let i = 1; i < points.length; i++) {
-      const [lat1, lon1] = points[i - 1];
-      const [lat2, lon2] = points[i];
-      
-      const R = 6371; // Earth's radius in km
-      const dLat = ((lat2 - lat1) * Math.PI) / 180;
-      const dLon = ((lon2 - lon1) * Math.PI) / 180;
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos((lat1 * Math.PI) / 180) *
-          Math.cos((lat2 * Math.PI) / 180) *
-          Math.sin(dLon / 2) *
-          Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      totalDistance += R * c;
+    return new Promise((resolve) => {
+      const geocoder = window.ymaps.geocode(query, { results: 5 });
+      geocoder.then((result: any) => {
+        const places: { name: string; address: string; coordinates: [number, number] }[] = [];
+        result.geoObjects.each((geoObject: any) => {
+          const coords = geoObject.geometry.getCoordinates();
+          places.push({
+            name: geoObject.properties.get("name") || query,
+            address: geoObject.properties.get("description") || "",
+            coordinates: [coords[0], coords[1]],
+          });
+        });
+        resolve(places);
+      }).catch(() => resolve([]));
+    });
+  }, [isMapLoaded]);
+
+  // Clear destination route
+  const clearDestinationRoute = useCallback(() => {
+    if (destinationRouteRef.current && mapRef.current) {
+      mapRef.current.geoObjects.remove(destinationRouteRef.current);
+      destinationRouteRef.current = null;
     }
-    
-    return totalDistance;
+    if (destinationPlacemarkRef.current && mapRef.current) {
+      mapRef.current.geoObjects.remove(destinationPlacemarkRef.current);
+      destinationPlacemarkRef.current = null;
+    }
   }, []);
+
+  // Get current route points
+  const getRoutePoints = useCallback(() => {
+    return routePointsRef.current;
+  }, []);
+
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    searchPlaces,
+    clearDestinationRoute,
+    getRoutePoints,
+  }), [searchPlaces, clearDestinationRoute, getRoutePoints]);
+
+  // Build route to destination
+  useEffect(() => {
+    if (!mapRef.current || !isMapLoaded || !destination || !userLocation) return;
+
+    clearDestinationRoute();
+
+    const routingModes: Record<string, string> = {
+      walk: "pedestrian",
+      bike: "pedestrian",
+      car: "auto",
+      transit: "masstransit",
+    };
+
+    const routeColors: Record<string, string> = {
+      walk: "#22c55e",
+      bike: "#f59e0b",
+      car: "#3b82f6",
+      transit: "#8b5cf6",
+    };
+
+    // Add destination placemark
+    destinationPlacemarkRef.current = new window.ymaps.Placemark(
+      destination.coordinates,
+      {
+        balloonContent: destination.name,
+        hintContent: destination.address,
+      },
+      {
+        preset: "islands#redDotIcon",
+      }
+    );
+    mapRef.current.geoObjects.add(destinationPlacemarkRef.current);
+
+    // Build route
+    const multiRoute = new window.ymaps.multiRouter.MultiRoute(
+      {
+        referencePoints: [userLocation, destination.coordinates],
+        params: {
+          routingMode: routingModes[transportType] || "pedestrian",
+        },
+      },
+      {
+        boundsAutoApply: true,
+        routeActiveStrokeWidth: 4,
+        routeActiveStrokeColor: routeColors[transportType] || "#22c55e",
+      }
+    );
+
+    multiRoute.events.add("update", () => {
+      const activeRoute = multiRoute.getActiveRoute();
+      if (activeRoute) {
+        const distance = activeRoute.properties.get("distance");
+        const duration = activeRoute.properties.get("duration");
+        onDestinationRouteReady?.(
+          distance?.value ? distance.value / 1000 : 0,
+          duration?.value ? Math.ceil(duration.value / 60) : 0
+        );
+      }
+    });
+
+    destinationRouteRef.current = multiRoute;
+    mapRef.current.geoObjects.add(multiRoute);
+
+  }, [destination, userLocation, isMapLoaded, transportType, clearDestinationRoute, onDestinationRouteReady]);
+
+  // Display viewing route
+  useEffect(() => {
+    if (!mapRef.current || !isMapLoaded) return;
+
+    // Clear previous viewing route objects
+    viewingRouteObjectsRef.current.forEach((obj) => {
+      mapRef.current.geoObjects.remove(obj);
+    });
+    viewingRouteObjectsRef.current = [];
+
+    if (!viewingRoute) return;
+
+    const coordinates = viewingRoute.points.map((p) => p.coordinates);
+    
+    if (coordinates.length < 2) return;
+
+    // Create polyline
+    const routeColors: Record<string, string> = {
+      walk: "#22c55e",
+      bike: "#f59e0b",
+      car: "#3b82f6",
+      transit: "#8b5cf6",
+    };
+
+    const polyline = new window.ymaps.Polyline(
+      coordinates,
+      {},
+      {
+        strokeColor: routeColors[viewingRoute.transportType] || "#22c55e",
+        strokeWidth: 4,
+        strokeOpacity: 0.8,
+      }
+    );
+    mapRef.current.geoObjects.add(polyline);
+    viewingRouteObjectsRef.current.push(polyline);
+
+    // Add placemarks for each point
+    viewingRoute.points.forEach((point, index) => {
+      const hasMedia = point.media && point.media.length > 0;
+      const placemark = new window.ymaps.Placemark(
+        point.coordinates,
+        {
+          balloonContent: hasMedia 
+            ? `<div>Точка ${index + 1}<br/>${point.media?.length} медиа</div>` 
+            : `Точка ${index + 1}`,
+        },
+        {
+          preset: hasMedia ? "islands#bluePhotoIcon" : "islands#circleDotIcon",
+          iconColor: hasMedia ? "#3b82f6" : routeColors[viewingRoute.transportType],
+        }
+      );
+
+      placemark.events.add("click", () => {
+        onPointClick?.(point);
+      });
+
+      mapRef.current.geoObjects.add(placemark);
+      viewingRouteObjectsRef.current.push(placemark);
+    });
+
+    // Fit bounds to show entire route
+    const bounds = polyline.geometry.getBounds();
+    if (bounds) {
+      mapRef.current.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50 });
+    }
+
+  }, [viewingRoute, isMapLoaded, onPointClick]);
 
   // Handle route recording
   useEffect(() => {
     if (!mapRef.current || !isMapLoaded) return;
 
     if (isRouting) {
-      // Start recording route
       routePointsRef.current = [];
       startTimeRef.current = Date.now();
 
-      // Create polyline for route
       const routeColors: Record<string, string> = {
         walk: "#22c55e",
         bike: "#f59e0b",
@@ -152,34 +326,36 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
       );
       mapRef.current.geoObjects.add(routeLineRef.current);
 
-      // Start watching position
       watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
           const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
           
-          // Update user placemark
           if (userPlacemarkRef.current) {
             userPlacemarkRef.current.geometry.setCoordinates(coords);
           }
 
-          // Add point to route
-          routePointsRef.current.push(coords);
+          const newPoint: RoutePoint = {
+            id: `point-${Date.now()}`,
+            coordinates: coords,
+            timestamp: Date.now(),
+          };
+
+          routePointsRef.current.push(newPoint);
+          addPointToCurrentRoute(newPoint);
           
-          // Update polyline
           if (routeLineRef.current) {
-            routeLineRef.current.geometry.setCoordinates(routePointsRef.current);
+            routeLineRef.current.geometry.setCoordinates(
+              routePointsRef.current.map((p) => p.coordinates)
+            );
           }
 
-          // Center map on user
           mapRef.current.setCenter(coords, mapRef.current.getZoom(), {
             duration: 300,
           });
 
-          // Update distance
-          const distance = calculateDistance(routePointsRef.current);
+          const distance = calculateDistance(routePointsRef.current.map((p) => p.coordinates));
           onDistanceUpdate(distance);
 
-          // Update time
           if (startTimeRef.current) {
             const elapsedMinutes = Math.floor((Date.now() - startTimeRef.current) / 60000);
             onTimeUpdate(elapsedMinutes);
@@ -195,13 +371,10 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
         }
       );
     } else {
-      // Stop recording
       if (watchIdRef.current !== null) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-
-      // Keep the route line visible but stop updating
       startTimeRef.current = null;
     }
 
@@ -211,7 +384,31 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
         watchIdRef.current = null;
       }
     };
-  }, [isRouting, transportType, isMapLoaded, calculateDistance, onDistanceUpdate, onTimeUpdate]);
+  }, [isRouting, transportType, isMapLoaded, onDistanceUpdate, onTimeUpdate, addPointToCurrentRoute]);
+
+  const calculateDistance = useCallback((points: [number, number][]) => {
+    if (points.length < 2) return 0;
+    
+    let totalDistance = 0;
+    for (let i = 1; i < points.length; i++) {
+      const [lat1, lon1] = points[i - 1];
+      const [lat2, lon2] = points[i];
+      
+      const R = 6371;
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      totalDistance += R * c;
+    }
+    
+    return totalDistance;
+  }, []);
 
   // Update route color when transport type changes
   useEffect(() => {
@@ -259,7 +456,6 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
         </div>
       )}
 
-      {/* Center on user button */}
       <button 
         onClick={centerOnUser}
         className="absolute bottom-24 right-4 z-10 w-12 h-12 bg-card rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors"
@@ -272,6 +468,8 @@ const YandexMap = ({ isRouting, transportType, onDistanceUpdate, onTimeUpdate }:
       </button>
     </div>
   );
-};
+});
+
+YandexMap.displayName = "YandexMap";
 
 export default YandexMap;

@@ -350,16 +350,33 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
   // Draw selected destination route
   useEffect(() => {
-    if (!mapRef.current || !isMapLoaded || !destination || destinationRoutes.length === 0) return;
+    if (!mapRef.current || !isMapLoaded) return;
 
     const map = mapRef.current;
+
+    // If no destination or no routes, clear the layer
+    if (!destination || destinationRoutes.length === 0) {
+      if (map.getLayer("destination-route")) {
+        map.removeLayer("destination-route");
+      }
+      if (map.getSource("destination-route")) {
+        map.removeSource("destination-route");
+      }
+      return;
+    }
+
     const idx = Math.min(
       Math.max(selectedDestinationRouteIndex ?? 0, 0),
       destinationRoutes.length - 1
     );
 
     const route = destinationRoutes[idx];
-    if (!route?.geometry) return;
+    if (!route?.geometry) {
+      console.warn("[MapboxMap] No geometry in route:", route);
+      return;
+    }
+
+    console.log("[MapboxMap] Drawing route with", route.geometry.coordinates.length, "points");
 
     const distance = route.distance / 1000;
     const duration = Math.ceil(route.duration / 60);
@@ -367,46 +384,42 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     const color = TRANSPORT_COLORS[transportType] || "#22c55e";
 
+    // Always remove and re-add for clean state
+    if (map.getLayer("destination-route")) {
+      map.removeLayer("destination-route");
+    }
     if (map.getSource("destination-route")) {
-      (map.getSource("destination-route") as mapboxgl.GeoJSONSource).setData({
+      map.removeSource("destination-route");
+    }
+
+    map.addSource("destination-route", {
+      type: "geojson",
+      data: {
         type: "Feature",
         properties: {},
         geometry: route.geometry,
-      });
-    } else {
-      map.addSource("destination-route", {
-        type: "geojson",
-        data: {
-          type: "Feature",
-          properties: {},
-          geometry: route.geometry,
-        },
-      });
+      },
+    });
 
-      map.addLayer({
-        id: "destination-route",
-        type: "line",
-        source: "destination-route",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-        },
-        paint: {
-          "line-color": color,
-          "line-width": 5,
-          "line-opacity": 0.8,
-        },
-      });
-    }
+    map.addLayer({
+      id: "destination-route",
+      type: "line",
+      source: "destination-route",
+      layout: {
+        "line-join": "round",
+        "line-cap": "round",
+      },
+      paint: {
+        "line-color": color,
+        "line-width": 6,
+        "line-opacity": 0.9,
+      },
+    });
 
-    // ensure correct color on route switching
-    if (map.getLayer("destination-route")) {
-      map.setPaintProperty("destination-route", "line-color", color);
-    }
-
+    // Fit bounds to show the entire route
     const bounds = new mapboxgl.LngLatBounds();
     route.geometry.coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
-    map.fitBounds(bounds, { padding: 80, duration: 800 });
+    map.fitBounds(bounds, { padding: 100, duration: 1000 });
   }, [destinationRoutes, selectedDestinationRouteIndex, isMapLoaded, destination, transportType, onDestinationRouteReady]);
 
   // Display viewing route

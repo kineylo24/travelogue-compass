@@ -150,18 +150,23 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   // Search places using Mapbox Geocoding API
   const searchPlaces = useCallback(async (query: string): Promise<{ name: string; address: string; coordinates: [number, number] }[]> => {
     try {
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=5&language=ru`
-      );
+      console.log("[MapboxMap] Searching for:", query);
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=5&language=ru`;
+      const response = await fetch(url);
       const data = await response.json();
       
-      return data.features?.map((item: any) => ({
+      console.log("[MapboxMap] Search results:", data);
+      
+      const results = data.features?.map((item: any) => ({
         name: item.text || item.place_name.split(",")[0],
         address: item.place_name,
-        coordinates: [item.center[1], item.center[0]] as [number, number], // Convert to [lat, lng] for compatibility
+        coordinates: [item.center[0], item.center[1]] as [number, number], // Mapbox returns [lng, lat], keep as is
       })) || [];
+      
+      console.log("[MapboxMap] Parsed results:", results);
+      return results;
     } catch (error) {
-      console.error("Search error:", error);
+      console.error("[MapboxMap] Search error:", error);
       return [];
     }
   }, []);
@@ -199,12 +204,18 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   useEffect(() => {
     if (!mapRef.current || !isMapLoaded || !destination || !userLocation) return;
 
+    console.log("[MapboxMap] Building route to destination:", destination);
+    console.log("[MapboxMap] User location:", userLocation);
+
     clearDestinationRoute();
 
     const map = mapRef.current;
-    const destCoords: [number, number] = [destination.coordinates[1], destination.coordinates[0]]; // [lng, lat]
+    // destination.coordinates is now [lng, lat] from search
+    const destCoords: [number, number] = [destination.coordinates[0], destination.coordinates[1]];
     const profile = MAPBOX_PROFILES[transportType] || 'walking';
     const color = TRANSPORT_COLORS[transportType] || '#22c55e';
+
+    console.log("[MapboxMap] Destination coords:", destCoords);
 
     // Add destination marker
     const el = document.createElement('div');
@@ -217,16 +228,20 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     // Fetch route from Mapbox Directions API
     const fetchRoute = async () => {
       try {
-        const response = await fetch(
-          `https://api.mapbox.com/directions/v5/mapbox/${profile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&access_token=${MAPBOX_ACCESS_TOKEN}`
-        );
+        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&access_token=${MAPBOX_ACCESS_TOKEN}`;
+        console.log("[MapboxMap] Fetching route:", url);
+        
+        const response = await fetch(url);
         const data = await response.json();
+
+        console.log("[MapboxMap] Route response:", data);
 
         if (data.routes && data.routes.length > 0) {
           const route = data.routes[0];
           const distance = route.distance / 1000; // Convert to km
           const duration = Math.ceil(route.duration / 60); // Convert to minutes
 
+          console.log("[MapboxMap] Route found:", { distance, duration });
           onDestinationRouteReady?.(distance, duration);
 
           // Add route layer
@@ -268,14 +283,11 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
             bounds.extend(coord);
           });
           map.fitBounds(bounds, { padding: 80, duration: 1000 });
+        } else {
+          console.error("[MapboxMap] No routes found:", data);
         }
       } catch (error) {
-        console.error("Route fetch error:", error);
-        // Fallback: straight line
-        onDestinationRouteReady?.(
-          calculateDistance([[userLocation[1], userLocation[0]], destination.coordinates]),
-          30
-        );
+        console.error("[MapboxMap] Route fetch error:", error);
       }
     };
 

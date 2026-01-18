@@ -19,8 +19,6 @@ interface MapTabProps {
 }
 
 const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => {
-  // Note: startRecording is now imported below with handleStartRoute
-  
   const [isRouting, setIsRouting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [transportType, setTransportType] = useState<TransportType>("walk");
@@ -34,13 +32,14 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [routeName, setRouteName] = useState("");
   const [routeCity, setRouteCity] = useState("");
-  const [selectedPoint, setSelectedPoint] = useState<RoutePoint | null>(null);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [showMediaDialog, setShowMediaDialog] = useState(false);
   const [mediaCaption, setMediaCaption] = useState("");
   
   const mapRef = useRef<LeafletMapRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const selectedPoint = viewingRoute?.points.find((p) => p.id === selectedPointId) ?? null;
   const transportOptions = [
     { id: "walk" as TransportType, icon: Footprints, label: "Пешком" },
     { id: "bike" as TransportType, icon: Bike, label: "Велосипед" },
@@ -48,7 +47,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
     { id: "transit" as TransportType, icon: Bus, label: "Транспорт" },
   ];
 
-  const { stopRecording, startRecording, routes, addMediaToPoint, updateRoute } = useRoutes();
+  const { stopRecording, startRecording, addMediaToPoint, updateRoute } = useRoutes();
 
   const handleStartRoute = () => {
     startRecording();
@@ -66,7 +65,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
   const handleSaveRoute = () => {
     const savedRoute = stopRecording();
-    if (savedRoute && (routeName || routeCity)) {
+    if (savedRoute) {
       updateRoute(savedRoute.id, {
         name: routeName || savedRoute.name,
         city: routeCity || savedRoute.city,
@@ -109,26 +108,28 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   };
 
   const handlePointClick = (point: RoutePoint) => {
-    setSelectedPoint(point);
+    setSelectedPointId(point.id);
     setShowMediaDialog(true);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedPoint || !viewingRoute) return;
+    if (!file || !selectedPointId || !viewingRoute) return;
 
     const url = URL.createObjectURL(file);
     const type = file.type.startsWith("video") ? "video" : "photo";
-    
-    addMediaToPoint(viewingRoute.id, selectedPoint.id, {
+
+    addMediaToPoint(viewingRoute.id, selectedPointId, {
       type,
       url,
       caption: mediaCaption,
     });
-    
+
     setMediaCaption("");
+    // keep dialog open; clear the file input so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+      fileInputRef.current.accept = "image/*,video/*";
     }
   };
 

@@ -3,6 +3,7 @@ import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag, Check,
 import LeafletMap, { LeafletMapRef } from "./LeafletMap";
 import { useRoutes, SavedRoute, RoutePoint } from "@/contexts/RoutesContext";
 import { Destination } from "@/types/routes";
+import { toast } from "@/components/ui/sonner";
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const { stopRecording, startRecording, addMediaToPoint, updateRoute } = useRoutes();
 
   const handleStartRoute = () => {
+    console.log("[MapTab] start recording");
     startRecording();
     setIsRouting(true);
     setDistance(0);
@@ -59,19 +61,31 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   };
 
   const handleEndRoute = () => {
+    console.log("[MapTab] end recording (open save dialog)");
     setIsRouting(false);
     setShowSaveDialog(true);
   };
 
   const handleSaveRoute = () => {
+    console.log("[MapTab] save recording");
     const savedRoute = stopRecording();
-    if (savedRoute) {
-      updateRoute(savedRoute.id, {
-        name: routeName || savedRoute.name,
-        city: routeCity || savedRoute.city,
-        transportType,
+
+    if (!savedRoute) {
+      toast("Маршрут не сохранён", {
+        description: "Нужно минимум 2 GPS-точки. Нажмите «Начать маршрут», пройдите немного и попробуйте снова.",
       });
+      setShowSaveDialog(false);
+      setRouteName("");
+      setRouteCity("");
+      return;
     }
+
+    updateRoute(savedRoute.id, {
+      name: routeName || savedRoute.name,
+      city: routeCity || savedRoute.city,
+      transportType,
+    });
+
     setShowSaveDialog(false);
     setRouteName("");
     setRouteCity("");

@@ -404,7 +404,7 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainerRef} className="absolute inset-0" />
-      
+
       {!isMapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div className="flex flex-col items-center gap-3">
@@ -414,7 +414,27 @@ const LeafletMap = forwardRef<LeafletMapRef, LeafletMapProps>(({
         </div>
       )}
 
-      <button 
+      {tilesError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 ios-blur">
+          <div className="ios-card-lg p-4 max-w-[320px] text-center">
+            <p className="font-semibold text-foreground">Не удалось загрузить карту</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Часто это блокируют AdBlock/фильтры или сеть. Попробуйте отключить блокировщик и нажать «Повторить».
+            </p>
+            <button
+              onClick={() => {
+                setTilesError(false);
+                tileLayerRef.current?.redraw();
+              }}
+              className="mt-3 w-full py-2.5 rounded-xl bg-primary text-primary-foreground font-medium"
+            >
+              Повторить
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
         onClick={centerOnUser}
         className="absolute bottom-24 right-4 z-[1000] w-12 h-12 bg-card rounded-full shadow-lg flex items-center justify-center hover:bg-muted transition-colors"
         aria-label="Моё местоположение"

@@ -5,20 +5,37 @@ import TravelsTab from "@/components/travels/TravelsTab";
 import MapTab from "@/components/map/MapTab";
 import ChatsTab from "@/components/chats/ChatsTab";
 import ProfileTab from "@/components/profile/ProfileTab";
+import { RoutesProvider, SavedRoute } from "@/contexts/RoutesContext";
 
 type TabType = "home" | "travels" | "map" | "chats" | "profile";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<TabType>("home");
+  const [viewingRoute, setViewingRoute] = useState<SavedRoute | null>(null);
+
+  const handleViewRoute = (route: SavedRoute) => {
+    setViewingRoute(route);
+    setActiveTab("map");
+  };
+
+  const handleBackFromRoute = () => {
+    setViewingRoute(null);
+    setActiveTab("travels");
+  };
 
   const renderTab = () => {
     switch (activeTab) {
       case "home":
         return <HomeTab />;
       case "travels":
-        return <TravelsTab />;
+        return <TravelsTab onViewRoute={handleViewRoute} />;
       case "map":
-        return <MapTab />;
+        return (
+          <MapTab 
+            viewingRoute={viewingRoute} 
+            onBackFromRoute={handleBackFromRoute}
+          />
+        );
       case "chats":
         return <ChatsTab />;
       case "profile":
@@ -29,13 +46,19 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background max-w-md mx-auto relative overflow-hidden">
-      {/* iPhone-style container */}
-      <div className="relative min-h-screen">
-        {renderTab()}
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+    <RoutesProvider>
+      <div className="min-h-screen bg-background max-w-md mx-auto relative overflow-hidden">
+        <div className="relative min-h-screen">
+          {renderTab()}
+          <BottomNav activeTab={activeTab} onTabChange={(tab) => {
+            setActiveTab(tab);
+            if (tab !== "map") {
+              setViewingRoute(null);
+            }
+          }} />
+        </div>
       </div>
-    </div>
+    </RoutesProvider>
   );
 };
 

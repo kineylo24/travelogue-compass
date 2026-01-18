@@ -5,21 +5,25 @@ import TravelsTab from "@/components/travels/TravelsTab";
 import MapTab from "@/components/map/MapTab";
 import ChatsTab from "@/components/chats/ChatsTab";
 import ProfileTab from "@/components/profile/ProfileTab";
-import { RoutesProvider, SavedRoute } from "@/contexts/RoutesContext";
+import { RoutesProvider, SavedRoute, useRoutes } from "@/contexts/RoutesContext";
 
 type TabType = "home" | "travels" | "map" | "chats" | "profile";
 
-const Index = () => {
+const IndexInner = () => {
+  const { getRoute } = useRoutes();
+
   const [activeTab, setActiveTab] = useState<TabType>("home");
-  const [viewingRoute, setViewingRoute] = useState<SavedRoute | null>(null);
+  const [viewingRouteId, setViewingRouteId] = useState<string | null>(null);
+
+  const viewingRoute = viewingRouteId ? getRoute(viewingRouteId) ?? null : null;
 
   const handleViewRoute = (route: SavedRoute) => {
-    setViewingRoute(route);
+    setViewingRouteId(route.id);
     setActiveTab("map");
   };
 
   const handleBackFromRoute = () => {
-    setViewingRoute(null);
+    setViewingRouteId(null);
     setActiveTab("travels");
   };
 
@@ -30,12 +34,7 @@ const Index = () => {
       case "travels":
         return <TravelsTab onViewRoute={handleViewRoute} />;
       case "map":
-        return (
-          <MapTab 
-            viewingRoute={viewingRoute} 
-            onBackFromRoute={handleBackFromRoute}
-          />
-        );
+        return <MapTab viewingRoute={viewingRoute} onBackFromRoute={handleBackFromRoute} />;
       case "chats":
         return <ChatsTab />;
       case "profile":
@@ -46,18 +45,27 @@ const Index = () => {
   };
 
   return (
-    <RoutesProvider>
-      <div className="min-h-screen bg-background max-w-md mx-auto relative overflow-hidden">
-        <div className="relative min-h-screen">
-          {renderTab()}
-          <BottomNav activeTab={activeTab} onTabChange={(tab) => {
+    <div className="min-h-screen bg-background max-w-md mx-auto relative overflow-hidden">
+      <div className="relative min-h-screen">
+        {renderTab()}
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={(tab) => {
             setActiveTab(tab);
             if (tab !== "map") {
-              setViewingRoute(null);
+              setViewingRouteId(null);
             }
-          }} />
-        </div>
+          }}
+        />
       </div>
+    </div>
+  );
+};
+
+const Index = () => {
+  return (
+    <RoutesProvider>
+      <IndexInner />
     </RoutesProvider>
   );
 };

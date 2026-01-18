@@ -241,6 +241,37 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     return R * c;
   }, []);
 
+  /**
+   * Directions API sometimes returns a full route geometry (route.geometry),
+   * but in some cases we only reliably have step geometries.
+   * This helper always returns a single LineString if possible.
+   */
+  const extractRouteGeometry = useCallback((route: any): GeoJSON.LineString | null => {
+    const g = route?.geometry;
+    if (g?.type === "LineString" && Array.isArray(g.coordinates) && g.coordinates.length > 1) {
+      return g as GeoJSON.LineString;
+    }
+
+    const steps = route?.legs?.[0]?.steps;
+    if (!Array.isArray(steps) || steps.length === 0) return null;
+
+    const coords: [number, number][] = [];
+    for (const step of steps) {
+      const sg = step?.geometry;
+      if (sg?.type !== "LineString" || !Array.isArray(sg.coordinates)) continue;
+
+      for (const c of sg.coordinates as [number, number][]) {
+        const last = coords[coords.length - 1];
+        if (!last || last[0] !== c[0] || last[1] !== c[1]) {
+          coords.push(c);
+        }
+      }
+    }
+
+    if (coords.length < 2) return null;
+    return { type: "LineString", coordinates: coords } as GeoJSON.LineString;
+  }, []);
+
   // Fetch route variants to destination using Mapbox Directions API
   useEffect(() => {
     if (!mapRef.current || !isMapLoaded || !destination || !userLocation) return;
@@ -354,14 +385,19 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     const map = mapRef.current;
 
+    const ROUTE_SOURCE_ID = "destination-route";
+    const ROUTE_LAYER_ID = "destination-route";
+    const ROUTE_CASING_LAYER_ID = "destination-route-casing";
+
+    const clear = () => {
+      if (map.getLayer(ROUTE_LAYER_ID)) map.removeLayer(ROUTE_LAYER_ID);
+      if (map.getLayer(ROUTE_CASING_LAYER_ID)) map.removeLayer(ROUTE_CASING_LAYER_ID);
+      if (map.getSource(ROUTE_SOURCE_ID)) map.removeSource(ROUTE_SOURCE_ID);
+    };
+
     // If no destination or no routes, clear the layer
     if (!destination || destinationRoutes.length === 0) {
-      if (map.getLayer("destination-route")) {
-        map.removeLayer("destination-route");
-      }
-      if (map.getSource("destination-route")) {
-        map.removeSource("destination-route");
-      }
+      clear();
       return;
     }
 
@@ -371,12 +407,12 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     );
 
     const route = destinationRoutes[idx];
-    if (!route?.geometry) {
-      console.warn("[MapboxMap] No geometry in route:", route);
+    const geometry = extractRouteGeometry(route);
+
+    if (!geometry) {
+      console.warn("[MapboxMap] Unable to extract route geometry:", route);
       return;
     }
-
-    console.log("[MapboxMap] Drawing route with", route.geometry.coordinates.length, "points");
 
     const distance = route.distance / 1000;
     const duration = Math.ceil(route.duration / 60);
@@ -384,43 +420,68 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     const color = TRANSPORT_COLORS[transportType] || "#22c55e";
 
-    // Always remove and re-add for clean state
-    if (map.getLayer("destination-route")) {
-      map.removeLayer("destination-route");
+    const draw = () => {
+      try {
+        clear();
+
+        map.addSource(ROUTE_SOURCE_ID, {
+          type: "geojson",
+          data: {
+            type: "Feature",
+            properties: {},
+            geometry,
+          },
+        });
+
+        // Casing (outline) for better visibility like Yandex/Google
+        map.addLayer({
+          id: ROUTE_CASING_LAYER_ID,
+          type: "line",
+          source: ROUTE_SOURCE_ID,
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": "#0b0b0b",
+            "line-width": 10,
+            "line-opacity": 0.35,
+          },
+        });
+
+        map.addLayer({
+          id: ROUTE_LAYER_ID,
+          type: "line",
+          source: ROUTE_SOURCE_ID,
+          layout: {
+            "line-join": "round",
+            "line-cap": "round",
+          },
+          paint: {
+            "line-color": color,
+            "line-width": 6,
+            "line-opacity": 0.95,
+          },
+        });
+
+        const bounds = new mapboxgl.LngLatBounds();
+        geometry.coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
+        map.fitBounds(bounds, { padding: 120, duration: 900 });
+
+        console.log("[MapboxMap] Route drawn:", geometry.coordinates.length, "points");
+      } catch (e) {
+        console.error("[MapboxMap] Failed to draw route layer:", e);
+      }
+    };
+
+    // Ensure style is ready (prevents silent addLayer failures)
+    if (!map.isStyleLoaded()) {
+      map.once("idle", draw);
+      return;
     }
-    if (map.getSource("destination-route")) {
-      map.removeSource("destination-route");
-    }
 
-    map.addSource("destination-route", {
-      type: "geojson",
-      data: {
-        type: "Feature",
-        properties: {},
-        geometry: route.geometry,
-      },
-    });
-
-    map.addLayer({
-      id: "destination-route",
-      type: "line",
-      source: "destination-route",
-      layout: {
-        "line-join": "round",
-        "line-cap": "round",
-      },
-      paint: {
-        "line-color": color,
-        "line-width": 6,
-        "line-opacity": 0.9,
-      },
-    });
-
-    // Fit bounds to show the entire route
-    const bounds = new mapboxgl.LngLatBounds();
-    route.geometry.coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
-    map.fitBounds(bounds, { padding: 100, duration: 1000 });
-  }, [destinationRoutes, selectedDestinationRouteIndex, isMapLoaded, destination, transportType, onDestinationRouteReady]);
+    draw();
+  }, [destinationRoutes, selectedDestinationRouteIndex, isMapLoaded, destination, transportType, onDestinationRouteReady, extractRouteGeometry]);
 
   // Display viewing route
   useEffect(() => {

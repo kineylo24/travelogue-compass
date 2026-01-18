@@ -276,22 +276,22 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
             {transportType === "car" && (
               <div className="flex gap-2 mb-3">
                 <button
-                  onClick={() => setRoutePreference(prev => ({ ...prev, avoidTolls: !prev.avoidTolls }))}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  onClick={() => setRoutePreference((prev) => ({ ...prev, avoidTolls: !prev.avoidTolls }))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
                     routePreference.avoidTolls
-                      ? "bg-amber-500/20 text-amber-600 border border-amber-500/30"
-                      : "bg-muted text-muted-foreground"
+                      ? "bg-accent text-accent-foreground border-border"
+                      : "bg-muted text-muted-foreground border-transparent"
                   }`}
                 >
                   <DollarSign size={14} />
                   <span>Без платных</span>
                 </button>
                 <button
-                  onClick={() => setRoutePreference(prev => ({ ...prev, useTraffic: !prev.useTraffic }))}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  onClick={() => setRoutePreference((prev) => ({ ...prev, useTraffic: !prev.useTraffic }))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
                     routePreference.useTraffic
-                      ? "bg-green-500/20 text-green-600 border border-green-500/30"
-                      : "bg-muted text-muted-foreground"
+                      ? "bg-primary/10 text-primary border-primary/20"
+                      : "bg-muted text-muted-foreground border-transparent"
                   }`}
                 >
                   <Clock size={14} />

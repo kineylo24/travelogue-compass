@@ -7,6 +7,11 @@ import { MAPBOX_ACCESS_TOKEN, MAPBOX_STYLES, MAPBOX_PROFILES, TRANSPORT_COLORS }
 
 mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
+export interface RoutePreference {
+  avoidTolls: boolean;
+  useTraffic: boolean;
+}
+
 interface MapboxMapProps {
   isRouting: boolean;
   transportType: string;
@@ -14,10 +19,12 @@ interface MapboxMapProps {
   onTimeUpdate: (time: number) => void;
 
   destination?: Destination | null;
+  /** Route preferences (avoid tolls, use traffic) */
+  routePreference?: RoutePreference;
   /** Returns summary of the selected route */
   onDestinationRouteReady?: (distance: number, duration: number) => void;
   /** Returns list of available route variants (for UI selection) */
-  onDestinationRoutesReady?: (routes: { index: number; distance: number; duration: number }[]) => void;
+  onDestinationRoutesReady?: (routes: { index: number; distance: number; duration: number; label?: string }[]) => void;
   /** Called when destination routing fails */
   onDestinationRouteError?: (message: string) => void;
   selectedDestinationRouteIndex?: number;
@@ -40,6 +47,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   onDistanceUpdate,
   onTimeUpdate,
   destination,
+  routePreference,
   onDestinationRouteReady,
   onDestinationRoutesReady,
   onDestinationRouteError,
@@ -267,31 +275,42 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     destinationMarkerRef.current = new mapboxgl.Marker(el).setLngLat(destCoords).addTo(map);
 
-    const fetchRoutes = async (useProfile: string, allowAlternatives: boolean) => {
+    const fetchRoutes = async (useProfile: string, allowAlternatives: boolean, excludeTolls: boolean) => {
       const alternativesParam = allowAlternatives ? "&alternatives=true" : "";
+      const excludeParam = excludeTolls ? "&exclude=toll" : "";
       return fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/${useProfile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&steps=false${alternativesParam}&access_token=${MAPBOX_ACCESS_TOKEN}`
+        `https://api.mapbox.com/directions/v5/mapbox/${useProfile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&steps=true${alternativesParam}${excludeParam}&access_token=${MAPBOX_ACCESS_TOKEN}`
       );
     };
 
+    const avoidTolls = routePreference?.avoidTolls ?? false;
+    const useTraffic = routePreference?.useTraffic ?? false;
+
+    // Use driving-traffic for real-time traffic when car is selected
+    if ((profile === "driving" || profile === "driving-traffic") && useTraffic) {
+      profile = "driving-traffic";
+    } else if (profile === "driving-traffic" && !useTraffic) {
+      profile = "driving";
+    }
+
     const load = async () => {
       try {
-        let response = await fetchRoutes(profile, true);
+        let response = await fetchRoutes(profile, true, avoidTolls);
         let data = await response.json();
 
         // Some profiles (e.g. driving-traffic) may not support alternatives reliably
         if ((!data?.routes || data.routes.length === 0) && response.ok) {
-          response = await fetchRoutes(profile, false);
+          response = await fetchRoutes(profile, false, avoidTolls);
           data = await response.json();
         }
 
         // If still failing with distance error, try driving as fallback
         if (!response.ok && data?.code === "InvalidInput" && profile !== "driving") {
           console.log("[MapboxMap] Profile failed, falling back to driving");
-          response = await fetchRoutes("driving", true);
+          response = await fetchRoutes("driving", true, avoidTolls);
           data = await response.json();
           if ((!data?.routes || data.routes.length === 0) && response.ok) {
-            response = await fetchRoutes("driving", false);
+            response = await fetchRoutes("driving", false, avoidTolls);
             data = await response.json();
           }
         }
@@ -316,6 +335,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
           index,
           distance: r.distance / 1000,
           duration: Math.ceil(r.duration / 60),
+          label: index === 0 ? "Рекомендуемый" : `Маршрут ${index + 1}`,
         }));
         onDestinationRoutesReady?.(meta);
 
@@ -326,7 +346,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     };
 
     load();
-  }, [destination, userLocation, isMapLoaded, transportType, clearDestinationRoute, onDestinationRoutesReady, onDestinationRouteError, getApproxDistanceKm]);
+  }, [destination, userLocation, isMapLoaded, transportType, routePreference, clearDestinationRoute, onDestinationRoutesReady, onDestinationRouteError, getApproxDistanceKm]);
 
   // Draw selected destination route
   useEffect(() => {

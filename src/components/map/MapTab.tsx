@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
-import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag, Check, ArrowLeft, Camera, Play, Image as ImageIcon, Trash2, Edit2 } from "lucide-react";
-import MapboxMap, { MapboxMapRef } from "./MapboxMap";
+import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag, Check, ArrowLeft, Camera, Play, Image as ImageIcon, Trash2, Edit2, DollarSign, Clock } from "lucide-react";
+import MapboxMap, { MapboxMapRef, RoutePreference } from "./MapboxMap";
 import { useRoutes, SavedRoute, RoutePoint } from "@/contexts/RoutesContext";
 import { Destination } from "@/types/routes";
 import { toast } from "@/components/ui/sonner";
@@ -31,8 +31,9 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
   const [destination, setDestination] = useState<Destination | null>(null);
   const [destinationInfo, setDestinationInfo] = useState<{ distance: number; duration: number } | null>(null);
-  const [destinationRoutes, setDestinationRoutes] = useState<{ index: number; distance: number; duration: number }[]>([]);
+  const [destinationRoutes, setDestinationRoutes] = useState<{ index: number; distance: number; duration: number; label?: string }[]>([]);
   const [selectedDestinationRouteIndex, setSelectedDestinationRouteIndex] = useState(0);
+  const [routePreference, setRoutePreference] = useState<RoutePreference>({ avoidTolls: false, useTraffic: true });
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [routeName, setRouteName] = useState("");
@@ -120,9 +121,12 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
     setSearchResults([]);
   };
 
-  const handleDestinationRoutesReady = (routes: { index: number; distance: number; duration: number }[]) => {
+  const handleDestinationRoutesReady = (routes: { index: number; distance: number; duration: number; label?: string }[]) => {
     setDestinationRoutes(routes);
     setSelectedDestinationRouteIndex(0);
+    if (routes.length > 0) {
+      setDestinationInfo({ distance: routes[0].distance, duration: routes[0].duration });
+    }
   };
 
   const handleDestinationRouteReady = (dist: number, dur: number) => {
@@ -184,6 +188,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
         onDistanceUpdate={setDistance}
         onTimeUpdate={setTime}
         destination={destination}
+        routePreference={routePreference}
         onDestinationRoutesReady={handleDestinationRoutesReady}
         onDestinationRouteReady={handleDestinationRouteReady}
         onDestinationRouteError={handleDestinationRouteError}
@@ -253,7 +258,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
       {/* Destination info card */}
       {destination && destinationInfo && !isRouting && !viewingRoute && (
         <div className="absolute top-20 left-4 right-4 z-[1100]">
-          <div className="ios-card-lg p-4">
+          <div className="ios-card-lg p-4 max-h-[60vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-3">
               <div>
                 <h3 className="font-semibold text-foreground">{destination.name}</h3>
@@ -266,6 +271,34 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                 <X size={18} />
               </button>
             </div>
+
+            {/* Route preferences for car */}
+            {transportType === "car" && (
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setRoutePreference(prev => ({ ...prev, avoidTolls: !prev.avoidTolls }))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    routePreference.avoidTolls
+                      ? "bg-amber-500/20 text-amber-600 border border-amber-500/30"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <DollarSign size={14} />
+                  <span>Без платных</span>
+                </button>
+                <button
+                  onClick={() => setRoutePreference(prev => ({ ...prev, useTraffic: !prev.useTraffic }))}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    routePreference.useTraffic
+                      ? "bg-green-500/20 text-green-600 border border-green-500/30"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <Clock size={14} />
+                  <span>С пробками</span>
+                </button>
+              </div>
+            )}
 
             {destinationRoutes.length > 1 && (
               <div className="mb-3">
@@ -285,7 +318,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                             : "bg-muted text-muted-foreground"
                         }`}
                       >
-                        Маршрут {r.index + 1} • {r.distance.toFixed(1)} км
+                        {r.label || `Маршрут ${r.index + 1}`} • {r.distance.toFixed(1)} км
                       </button>
                     );
                   })}

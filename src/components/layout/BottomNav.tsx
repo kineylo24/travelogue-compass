@@ -17,8 +17,8 @@ const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-nav-bg/95 ios-blur border-t border-nav-border safe-area-inset-bottom z-50">
-      <div className="flex justify-around items-center h-16 max-w-md mx-auto">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background/95 ios-blur border-t border-border safe-area-inset-bottom z-[9999]">
+      <div className="flex justify-around items-center h-16 max-w-md mx-auto px-2">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;

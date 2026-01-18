@@ -2,87 +2,122 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+@import url('https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* iOS-inspired clean design with travel accents */
+    --background: 0 0% 98%;
+    --foreground: 0 0% 7%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 7%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Travel-inspired teal/cyan accent */
+    --primary: 195 85% 45%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 0 0% 20%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 15% 95%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 195 75% 92%;
+    --accent-foreground: 195 85% 35%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 195 85% 45%;
 
-    --radius: 0.5rem;
+    --radius: 1rem;
+
+    /* Custom travel app tokens */
+    --nav-bg: 0 0% 100%;
+    --nav-border: 0 0% 92%;
+    --nav-active: 195 85% 45%;
+    --nav-inactive: 0 0% 55%;
+
+    --story-gradient-start: 330 90% 60%;
+    --story-gradient-end: 35 95% 55%;
+
+    --ios-blur: blur(20px);
+    --ios-shadow: 0 2px 10px -2px hsl(0 0% 0% / 0.08);
+    --ios-shadow-lg: 0 8px 30px -8px hsl(0 0% 0% / 0.12);
+
+    /* Gradient for stories ring */
+    --gradient-story: linear-gradient(135deg, hsl(330 90% 60%), hsl(35 95% 55%));
+    --gradient-primary: linear-gradient(135deg, hsl(195 85% 45%), hsl(180 70% 50%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 98%) 100%);
+
+    /* Tab colors */
+    --tab-active-bg: 195 85% 45%;
+    --tab-inactive-bg: 210 15% 95%;
+
+    /* Chat colors */
+    --chat-bubble-own: 195 85% 45%;
+    --chat-bubble-other: 210 15% 95%;
+
+    /* Map colors */
+    --map-route: 195 85% 45%;
+    --map-marker: 330 90% 60%;
+
+    /* Widget colors */
+    --widget-weather: 200 90% 50%;
+    --widget-currency: 145 70% 45%;
+    --widget-emergency: 0 75% 55%;
+    --widget-sim: 270 70% 55%;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 98%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 195 85% 50%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 18%;
+    --secondary-foreground: 0 0% 90%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 195 50% 20%;
+    --accent-foreground: 195 85% 70%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 195 85% 50%;
+
+    --nav-bg: 0 0% 10%;
+    --nav-border: 0 0% 18%;
+    --nav-active: 195 85% 50%;
+    --nav-inactive: 0 0% 50%;
+
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
@@ -100,6 +135,110 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+}
+
+@layer components {
+  .ios-card {
+    @apply bg-card rounded-2xl shadow-[var(--ios-shadow)];
+  }
+
+  .ios-card-lg {
+    @apply bg-card rounded-2xl shadow-[var(--ios-shadow-lg)];
+  }
+
+  .ios-blur {
+    backdrop-filter: var(--ios-blur);
+    -webkit-backdrop-filter: var(--ios-blur);
+  }
+
+  .story-ring {
+    background: var(--gradient-story);
+    padding: 2px;
+  }
+
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .tab-pill {
+    @apply px-4 py-2 rounded-full text-sm font-medium transition-all duration-200;
+  }
+
+  .tab-pill-active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .tab-pill-inactive {
+    @apply bg-muted text-muted-foreground hover:bg-accent;
+  }
+
+  .widget-card {
+    @apply bg-card rounded-2xl p-4 shadow-[var(--ios-shadow)];
+  }
+
+  .chat-bubble {
+    @apply px-4 py-2.5 rounded-2xl max-w-[75%];
+  }
+
+  .chat-bubble-own {
+    @apply bg-primary text-primary-foreground rounded-br-md;
+  }
+
+  .chat-bubble-other {
+    @apply bg-muted text-foreground rounded-bl-md;
+  }
+
+  .nav-item {
+    @apply flex flex-col items-center gap-0.5 text-[10px] font-medium transition-colors duration-200;
+  }
+
+  .nav-item-active {
+    @apply text-primary;
+  }
+
+  .nav-item-inactive {
+    @apply text-muted-foreground;
+  }
+
+  .map-button {
+    @apply bg-card/95 ios-blur rounded-xl px-4 py-2.5 shadow-[var(--ios-shadow)] font-medium;
+  }
+
+  .profile-stat {
+    @apply flex flex-col items-center;
+  }
+
+  .profile-stat-value {
+    @apply text-lg font-bold text-foreground;
+  }
+
+  .profile-stat-label {
+    @apply text-xs text-muted-foreground;
+  }
+}
+
+@layer utilities {
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+  }
+
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top, 44px);
+  }
+}
+
+/* Custom scrollbar for iOS feel */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
 }

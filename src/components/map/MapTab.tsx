@@ -19,7 +19,7 @@ interface MapTabProps {
 }
 
 const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => {
-  const { stopRecording, routes, addMediaToPoint, updateRoute } = useRoutes();
+  // Note: startRecording is now imported below with handleStartRoute
   
   const [isRouting, setIsRouting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -48,7 +48,10 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
     { id: "transit" as TransportType, icon: Bus, label: "Транспорт" },
   ];
 
+  const { stopRecording, startRecording, routes, addMediaToPoint, updateRoute } = useRoutes();
+
   const handleStartRoute = () => {
+    startRecording();
     setIsRouting(true);
     setDistance(0);
     setTime(0);

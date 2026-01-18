@@ -26,6 +26,7 @@ export interface YandexMapRef {
 }
 
 const YANDEX_API_KEY = "499a1ddf-9da3-4fee-bf16-5aca0630d9dc";
+const API_LOAD_TIMEOUT = 10000;
 
 const YandexMap = forwardRef<YandexMapRef, YandexMapProps>(({
   isRouting,
@@ -52,29 +53,71 @@ const YandexMap = forwardRef<YandexMapRef, YandexMapProps>(({
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // Load Yandex Maps API
   useEffect(() => {
+    // Check if already loaded
     if (window.ymaps) {
-      setIsMapLoaded(true);
+      window.ymaps.ready(() => {
+        setIsMapLoaded(true);
+      });
+      return;
+    }
+
+    // Check if script is already in DOM
+    const existingScript = document.querySelector(`script[src*="api-maps.yandex.ru"]`);
+    if (existingScript) {
+      const checkReady = setInterval(() => {
+        if (window.ymaps) {
+          window.ymaps.ready(() => {
+            setIsMapLoaded(true);
+            clearInterval(checkReady);
+          });
+        }
+      }, 100);
+      
+      setTimeout(() => {
+        clearInterval(checkReady);
+        if (!isMapLoaded) {
+          setLoadError("Таймаут загрузки карты");
+        }
+      }, API_LOAD_TIMEOUT);
       return;
     }
 
     const script = document.createElement("script");
     script.src = `https://api-maps.yandex.ru/2.1/?apikey=${YANDEX_API_KEY}&lang=ru_RU`;
     script.async = true;
+    
     script.onload = () => {
-      window.ymaps.ready(() => {
-        setIsMapLoaded(true);
-      });
-    };
-    document.head.appendChild(script);
-
-    return () => {
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
+      if (window.ymaps) {
+        window.ymaps.ready(() => {
+          console.log("Yandex Maps API loaded successfully");
+          setIsMapLoaded(true);
+        });
+      } else {
+        setLoadError("Ошибка: ymaps не определён");
       }
     };
-  }, []);
+    
+    script.onerror = (e) => {
+      console.error("Failed to load Yandex Maps API:", e);
+      setLoadError("Не удалось загрузить Яндекс Карты. Проверьте подключение к интернету.");
+    };
+    
+    document.head.appendChild(script);
+
+    const timeout = setTimeout(() => {
+      if (!isMapLoaded) {
+        setLoadError("Таймаут загрузки карты. Проверьте подключение.");
+      }
+    }, API_LOAD_TIMEOUT);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [isMapLoaded]);
 
   // Initialize map
   useEffect(() => {
@@ -450,8 +493,22 @@ const YandexMap = forwardRef<YandexMapRef, YandexMapProps>(({
       {!isMapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-muted-foreground">Загрузка карты...</span>
+            {loadError ? (
+              <>
+                <span className="text-sm text-destructive text-center px-4">{loadError}</span>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm"
+                >
+                  Перезагрузить
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-muted-foreground">Загрузка карты...</span>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Search, Navigation, Car, Footprints, Bike, Bus, X, MapPin, Flag, Check, ArrowLeft, Camera, Play, Image as ImageIcon, Trash2, Edit2 } from "lucide-react";
-import LeafletMap, { LeafletMapRef } from "./LeafletMap";
+import MapboxMap, { MapboxMapRef } from "./MapboxMap";
 import { useRoutes, SavedRoute, RoutePoint } from "@/contexts/RoutesContext";
 import { Destination } from "@/types/routes";
 import { toast } from "@/components/ui/sonner";
@@ -37,7 +37,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const [showMediaDialog, setShowMediaDialog] = useState(false);
   const [mediaCaption, setMediaCaption] = useState("");
   
-  const mapRef = useRef<LeafletMapRef>(null);
+  const mapRef = useRef<MapboxMapRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedPoint = viewingRoute?.points.find((p) => p.id === selectedPointId) ?? null;
@@ -149,7 +149,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
   return (
     <div className="h-[calc(100vh-4rem)] bg-background relative overflow-hidden pb-safe">
-      <LeafletMap
+      <MapboxMap
         ref={mapRef}
         isRouting={isRouting}
         transportType={transportType}

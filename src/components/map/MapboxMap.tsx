@@ -218,6 +218,21 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     getRoutePoints,
   }), [searchPlaces, clearDestinationRoute, getRoutePoints]);
 
+  // Calculate approximate distance between two [lng, lat] points in km
+  const getApproxDistanceKm = useCallback((from: [number, number], to: [number, number]) => {
+    const R = 6371; // Earth radius in km
+    const dLat = ((to[1] - from[1]) * Math.PI) / 180;
+    const dLon = ((to[0] - from[0]) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((from[1] * Math.PI) / 180) *
+        Math.cos((to[1] * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }, []);
+
   // Fetch route variants to destination using Mapbox Directions API
   useEffect(() => {
     if (!mapRef.current || !isMapLoaded || !destination || !userLocation) return;
@@ -229,7 +244,22 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     const map = mapRef.current;
     const destCoords: [number, number] = [destination.coordinates[0], destination.coordinates[1]]; // [lng, lat]
-    const profile = MAPBOX_PROFILES[transportType] || "walking";
+    
+    // Auto-select profile: walking/cycling have distance limits (~100km walking, ~300km cycling)
+    // For long distances, fallback to driving
+    const approxDistKm = getApproxDistanceKm(userLocation, destCoords);
+    let profile = MAPBOX_PROFILES[transportType] || "walking";
+    
+    const WALKING_LIMIT_KM = 100;
+    const CYCLING_LIMIT_KM = 300;
+    
+    if (profile === "walking" && approxDistKm > WALKING_LIMIT_KM) {
+      console.log(`[MapboxMap] Distance ${approxDistKm.toFixed(0)}km exceeds walking limit, switching to driving`);
+      profile = "driving";
+    } else if (profile === "cycling" && approxDistKm > CYCLING_LIMIT_KM) {
+      console.log(`[MapboxMap] Distance ${approxDistKm.toFixed(0)}km exceeds cycling limit, switching to driving`);
+      profile = "driving";
+    }
 
     // Add destination marker
     const el = document.createElement("div");
@@ -237,22 +267,33 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     destinationMarkerRef.current = new mapboxgl.Marker(el).setLngLat(destCoords).addTo(map);
 
-    const fetchRoutes = async (allowAlternatives: boolean) => {
+    const fetchRoutes = async (useProfile: string, allowAlternatives: boolean) => {
       const alternativesParam = allowAlternatives ? "&alternatives=true" : "";
       return fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/${profile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&steps=false${alternativesParam}&access_token=${MAPBOX_ACCESS_TOKEN}`
+        `https://api.mapbox.com/directions/v5/mapbox/${useProfile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&steps=false${alternativesParam}&access_token=${MAPBOX_ACCESS_TOKEN}`
       );
     };
 
     const load = async () => {
       try {
-        let response = await fetchRoutes(true);
+        let response = await fetchRoutes(profile, true);
         let data = await response.json();
 
         // Some profiles (e.g. driving-traffic) may not support alternatives reliably
         if ((!data?.routes || data.routes.length === 0) && response.ok) {
-          response = await fetchRoutes(false);
+          response = await fetchRoutes(profile, false);
           data = await response.json();
+        }
+
+        // If still failing with distance error, try driving as fallback
+        if (!response.ok && data?.code === "InvalidInput" && profile !== "driving") {
+          console.log("[MapboxMap] Profile failed, falling back to driving");
+          response = await fetchRoutes("driving", true);
+          data = await response.json();
+          if ((!data?.routes || data.routes.length === 0) && response.ok) {
+            response = await fetchRoutes("driving", false);
+            data = await response.json();
+          }
         }
 
         if (!response.ok) {
@@ -285,7 +326,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     };
 
     load();
-  }, [destination, userLocation, isMapLoaded, transportType, clearDestinationRoute, onDestinationRoutesReady, onDestinationRouteError]);
+  }, [destination, userLocation, isMapLoaded, transportType, clearDestinationRoute, onDestinationRoutesReady, onDestinationRouteError, getApproxDistanceKm]);
 
   // Draw selected destination route
   useEffect(() => {

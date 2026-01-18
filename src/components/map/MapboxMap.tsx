@@ -12,10 +12,20 @@ interface MapboxMapProps {
   transportType: string;
   onDistanceUpdate: (distance: number) => void;
   onTimeUpdate: (time: number) => void;
+
   destination?: Destination | null;
+  /** Returns summary of the selected route */
   onDestinationRouteReady?: (distance: number, duration: number) => void;
+  /** Returns list of available route variants (for UI selection) */
+  onDestinationRoutesReady?: (routes: { index: number; distance: number; duration: number }[]) => void;
+  /** Called when destination routing fails */
+  onDestinationRouteError?: (message: string) => void;
+  selectedDestinationRouteIndex?: number;
+
   viewingRoute?: SavedRoute | null;
   onPointClick?: (point: RoutePoint) => void;
+  /** When set, shows a media preview card above this point (if it has media) */
+  highlightPointId?: string | null;
 }
 
 export interface MapboxMapRef {
@@ -31,8 +41,12 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   onTimeUpdate,
   destination,
   onDestinationRouteReady,
+  onDestinationRoutesReady,
+  onDestinationRouteError,
+  selectedDestinationRouteIndex,
   viewingRoute,
   onPointClick,
+  highlightPointId,
 }, ref) => {
   const { addPointToCurrentRoute } = useRoutes();
   
@@ -41,6 +55,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const destinationMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const viewingRouteMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const highlightCardMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const routePointsRef = useRef<RoutePoint[]>([]);
   const watchIdRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -48,6 +63,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [mapError, setMapError] = useState(false);
+  const [destinationRoutes, setDestinationRoutes] = useState<any[]>([]);
 
   // Initialize map
   useEffect(() => {
@@ -174,12 +190,14 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   // Clear destination route
   const clearDestinationRoute = useCallback(() => {
     if (!mapRef.current) return;
-    
+
+    setDestinationRoutes([]);
+
     if (destinationMarkerRef.current) {
       destinationMarkerRef.current.remove();
       destinationMarkerRef.current = null;
     }
-    
+
     if (mapRef.current.getLayer('destination-route')) {
       mapRef.current.removeLayer('destination-route');
     }
@@ -200,99 +218,135 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     getRoutePoints,
   }), [searchPlaces, clearDestinationRoute, getRoutePoints]);
 
-  // Build route to destination using Mapbox Directions API
+  // Fetch route variants to destination using Mapbox Directions API
   useEffect(() => {
     if (!mapRef.current || !isMapLoaded || !destination || !userLocation) return;
 
-    console.log("[MapboxMap] Building route to destination:", destination);
+    console.log("[MapboxMap] Building routes to destination:", destination);
     console.log("[MapboxMap] User location:", userLocation);
 
     clearDestinationRoute();
 
     const map = mapRef.current;
-    // destination.coordinates is now [lng, lat] from search
-    const destCoords: [number, number] = [destination.coordinates[0], destination.coordinates[1]];
-    const profile = MAPBOX_PROFILES[transportType] || 'walking';
-    const color = TRANSPORT_COLORS[transportType] || '#22c55e';
-
-    console.log("[MapboxMap] Destination coords:", destCoords);
+    const destCoords: [number, number] = [destination.coordinates[0], destination.coordinates[1]]; // [lng, lat]
+    const profile = MAPBOX_PROFILES[transportType] || "walking";
 
     // Add destination marker
-    const el = document.createElement('div');
+    const el = document.createElement("div");
     el.innerHTML = `<div style="width: 24px; height: 24px; background: #ef4444; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`;
-    
-    destinationMarkerRef.current = new mapboxgl.Marker(el)
-      .setLngLat(destCoords)
-      .addTo(map);
 
-    // Fetch route from Mapbox Directions API
-    const fetchRoute = async () => {
+    destinationMarkerRef.current = new mapboxgl.Marker(el).setLngLat(destCoords).addTo(map);
+
+    const fetchRoutes = async (allowAlternatives: boolean) => {
+      const alternativesParam = allowAlternatives ? "&alternatives=true" : "";
+      return fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/${profile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&steps=false${alternativesParam}&access_token=${MAPBOX_ACCESS_TOKEN}`
+      );
+    };
+
+    const load = async () => {
       try {
-        const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${userLocation[0]},${userLocation[1]};${destCoords[0]},${destCoords[1]}?geometries=geojson&overview=full&access_token=${MAPBOX_ACCESS_TOKEN}`;
-        console.log("[MapboxMap] Fetching route:", url);
-        
-        const response = await fetch(url);
-        const data = await response.json();
+        let response = await fetchRoutes(true);
+        let data = await response.json();
 
-        console.log("[MapboxMap] Route response:", data);
-
-        if (data.routes && data.routes.length > 0) {
-          const route = data.routes[0];
-          const distance = route.distance / 1000; // Convert to km
-          const duration = Math.ceil(route.duration / 60); // Convert to minutes
-
-          console.log("[MapboxMap] Route found:", { distance, duration });
-          onDestinationRouteReady?.(distance, duration);
-
-          // Add route layer
-          if (map.getSource('destination-route')) {
-            (map.getSource('destination-route') as mapboxgl.GeoJSONSource).setData({
-              type: 'Feature',
-              properties: {},
-              geometry: route.geometry
-            });
-          } else {
-            map.addSource('destination-route', {
-              type: 'geojson',
-              data: {
-                type: 'Feature',
-                properties: {},
-                geometry: route.geometry
-              }
-            });
-
-            map.addLayer({
-              id: 'destination-route',
-              type: 'line',
-              source: 'destination-route',
-              layout: {
-                'line-join': 'round',
-                'line-cap': 'round'
-              },
-              paint: {
-                'line-color': color,
-                'line-width': 5,
-                'line-opacity': 0.8
-              }
-            });
-          }
-
-          // Fit bounds
-          const bounds = new mapboxgl.LngLatBounds();
-          route.geometry.coordinates.forEach((coord: [number, number]) => {
-            bounds.extend(coord);
-          });
-          map.fitBounds(bounds, { padding: 80, duration: 1000 });
-        } else {
-          console.error("[MapboxMap] No routes found:", data);
+        // Some profiles (e.g. driving-traffic) may not support alternatives reliably
+        if ((!data?.routes || data.routes.length === 0) && response.ok) {
+          response = await fetchRoutes(false);
+          data = await response.json();
         }
-      } catch (error) {
+
+        if (!response.ok) {
+          const msg = data?.message || data?.error || "Не удалось построить маршрут";
+          console.error("[MapboxMap] Directions error:", data);
+          onDestinationRouteError?.(msg);
+          return;
+        }
+
+        if (!data.routes || data.routes.length === 0) {
+          const msg = data?.message || "Маршрут не найден";
+          console.error("[MapboxMap] No routes found:", data);
+          onDestinationRouteError?.(msg);
+          return;
+        }
+
+        setDestinationRoutes(data.routes);
+
+        const meta = data.routes.map((r: any, index: number) => ({
+          index,
+          distance: r.distance / 1000,
+          duration: Math.ceil(r.duration / 60),
+        }));
+        onDestinationRoutesReady?.(meta);
+
+      } catch (error: any) {
         console.error("[MapboxMap] Route fetch error:", error);
+        onDestinationRouteError?.("Ошибка сети при построении маршрута");
       }
     };
 
-    fetchRoute();
-  }, [destination, userLocation, isMapLoaded, transportType, clearDestinationRoute, onDestinationRouteReady]);
+    load();
+  }, [destination, userLocation, isMapLoaded, transportType, clearDestinationRoute, onDestinationRoutesReady, onDestinationRouteError]);
+
+  // Draw selected destination route
+  useEffect(() => {
+    if (!mapRef.current || !isMapLoaded || !destination || destinationRoutes.length === 0) return;
+
+    const map = mapRef.current;
+    const idx = Math.min(
+      Math.max(selectedDestinationRouteIndex ?? 0, 0),
+      destinationRoutes.length - 1
+    );
+
+    const route = destinationRoutes[idx];
+    if (!route?.geometry) return;
+
+    const distance = route.distance / 1000;
+    const duration = Math.ceil(route.duration / 60);
+    onDestinationRouteReady?.(distance, duration);
+
+    const color = TRANSPORT_COLORS[transportType] || "#22c55e";
+
+    if (map.getSource("destination-route")) {
+      (map.getSource("destination-route") as mapboxgl.GeoJSONSource).setData({
+        type: "Feature",
+        properties: {},
+        geometry: route.geometry,
+      });
+    } else {
+      map.addSource("destination-route", {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: route.geometry,
+        },
+      });
+
+      map.addLayer({
+        id: "destination-route",
+        type: "line",
+        source: "destination-route",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+        },
+        paint: {
+          "line-color": color,
+          "line-width": 5,
+          "line-opacity": 0.8,
+        },
+      });
+    }
+
+    // ensure correct color on route switching
+    if (map.getLayer("destination-route")) {
+      map.setPaintProperty("destination-route", "line-color", color);
+    }
+
+    const bounds = new mapboxgl.LngLatBounds();
+    route.geometry.coordinates.forEach((coord: [number, number]) => bounds.extend(coord));
+    map.fitBounds(bounds, { padding: 80, duration: 800 });
+  }, [destinationRoutes, selectedDestinationRouteIndex, isMapLoaded, destination, transportType, onDestinationRouteReady]);
 
   // Display viewing route
   useEffect(() => {
@@ -367,6 +421,63 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     map.fitBounds(bounds, { padding: 80, duration: 1000 });
 
   }, [viewingRoute, isMapLoaded, onPointClick]);
+
+
+  // Show a media preview card above a point after upload
+  useEffect(() => {
+    if (!mapRef.current || !isMapLoaded) return;
+
+    if (highlightCardMarkerRef.current) {
+      highlightCardMarkerRef.current.remove();
+      highlightCardMarkerRef.current = null;
+    }
+
+    if (!viewingRoute || !highlightPointId) return;
+
+    const point = viewingRoute.points.find((p) => p.id === highlightPointId);
+    const media = point?.media?.[0];
+    if (!point || !media) return;
+
+    const map = mapRef.current;
+
+    const card = document.createElement("div");
+    card.style.cssText = [
+      "width: 160px",
+      "border-radius: 14px",
+      "overflow: hidden",
+      "border: 1px solid hsl(var(--border))",
+      "background: hsl(var(--card))",
+      "color: hsl(var(--card-foreground))",
+      "box-shadow: 0 14px 40px hsl(var(--foreground) / 0.18)",
+    ].join(";");
+
+    const caption = (media.caption || "").trim();
+    const captionHtml = caption
+      ? `<div style="padding: 8px 10px; font-size: 12px; line-height: 1.2;">${caption.replace(/</g, "&lt;")}</div>`
+      : "";
+
+    if (media.type === "photo") {
+      card.innerHTML = `
+        <img src="${media.url}" alt="${caption || "Фото"}" style="width: 100%; height: 110px; object-fit: cover; display: block;" loading="lazy" />
+        ${captionHtml}
+      `;
+    } else {
+      card.innerHTML = `
+        <div style="width: 100%; height: 110px; display: flex; align-items: center; justify-content: center; background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); font-weight: 600;">
+          Видео
+        </div>
+        ${captionHtml}
+      `;
+    }
+
+    highlightCardMarkerRef.current = new mapboxgl.Marker({
+      element: card,
+      anchor: "bottom",
+      offset: [0, -30],
+    })
+      .setLngLat([point.coordinates[1], point.coordinates[0]])
+      .addTo(map);
+  }, [highlightPointId, viewingRoute, isMapLoaded]);
 
   // Handle route recording
   useEffect(() => {

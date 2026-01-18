@@ -28,15 +28,20 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ name: string; address: string; coordinates: [number, number] }[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+
   const [destination, setDestination] = useState<Destination | null>(null);
   const [destinationInfo, setDestinationInfo] = useState<{ distance: number; duration: number } | null>(null);
+  const [destinationRoutes, setDestinationRoutes] = useState<{ index: number; distance: number; duration: number }[]>([]);
+  const [selectedDestinationRouteIndex, setSelectedDestinationRouteIndex] = useState(0);
+
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [routeName, setRouteName] = useState("");
   const [routeCity, setRouteCity] = useState("");
+
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [showMediaDialog, setShowMediaDialog] = useState(false);
   const [mediaCaption, setMediaCaption] = useState("");
-  
+  const [highlightPointId, setHighlightPointId] = useState<string | null>(null);
   const mapRef = useRef<MapboxMapRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,7 +98,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query.trim() || !mapRef.current) return;
-    
+
     setIsSearching(true);
     const results = await mapRef.current.searchPlaces(query);
     setSearchResults(results);
@@ -106,18 +111,35 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
       address: result.address,
       coordinates: result.coordinates,
     });
+    setDestinationInfo(null);
+    setDestinationRoutes([]);
+    setSelectedDestinationRouteIndex(0);
+
     setShowSearch(false);
     setSearchQuery("");
     setSearchResults([]);
+  };
+
+  const handleDestinationRoutesReady = (routes: { index: number; distance: number; duration: number }[]) => {
+    setDestinationRoutes(routes);
+    setSelectedDestinationRouteIndex(0);
   };
 
   const handleDestinationRouteReady = (dist: number, dur: number) => {
     setDestinationInfo({ distance: dist, duration: dur });
   };
 
+  const handleDestinationRouteError = (message: string) => {
+    setDestinationInfo(null);
+    setDestinationRoutes([]);
+    toast("Не удалось построить маршрут", { description: message });
+  };
+
   const handleClearDestination = () => {
     setDestination(null);
     setDestinationInfo(null);
+    setDestinationRoutes([]);
+    setSelectedDestinationRouteIndex(0);
     mapRef.current?.clearDestinationRoute();
   };
 
@@ -139,8 +161,14 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
       caption: mediaCaption,
     });
 
+    // show preview card above the marker on the map
+    setHighlightPointId(selectedPointId);
+
     setMediaCaption("");
-    // keep dialog open; clear the file input so the same file can be selected again
+    setShowMediaDialog(false);
+    setSelectedPointId(null);
+
+    // clear the file input so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
       fileInputRef.current.accept = "image/*,video/*";
@@ -156,9 +184,13 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
         onDistanceUpdate={setDistance}
         onTimeUpdate={setTime}
         destination={destination}
+        onDestinationRoutesReady={handleDestinationRoutesReady}
         onDestinationRouteReady={handleDestinationRouteReady}
+        onDestinationRouteError={handleDestinationRouteError}
+        selectedDestinationRouteIndex={selectedDestinationRouteIndex}
         viewingRoute={viewingRoute}
         onPointClick={handlePointClick}
+        highlightPointId={highlightPointId}
       />
 
       {/* Back button when viewing route */}
@@ -227,13 +259,40 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                 <h3 className="font-semibold text-foreground">{destination.name}</h3>
                 <p className="text-sm text-muted-foreground">{destination.address}</p>
               </div>
-              <button 
+              <button
                 onClick={handleClearDestination}
                 className="p-1 text-muted-foreground hover:text-foreground"
               >
                 <X size={18} />
               </button>
             </div>
+
+            {destinationRoutes.length > 1 && (
+              <div className="mb-3">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {destinationRoutes.map((r) => {
+                    const isActive = r.index === selectedDestinationRouteIndex;
+                    return (
+                      <button
+                        key={r.index}
+                        onClick={() => {
+                          setSelectedDestinationRouteIndex(r.index);
+                          setDestinationInfo({ distance: r.distance, duration: r.duration });
+                        }}
+                        className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-colors ${
+                          isActive
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        Маршрут {r.index + 1} • {r.distance.toFixed(1)} км
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-4 text-sm mb-3">
               <div>
                 <span className="text-muted-foreground">Расстояние: </span>

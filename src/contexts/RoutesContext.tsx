@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 
 export interface RoutePoint {
   id: string;
@@ -39,6 +39,30 @@ interface RoutesContextType {
 }
 
 const RoutesContext = createContext<RoutesContextType | null>(null);
+
+const STORAGE_KEY = "travelogue.routes.v1";
+
+function safeParseRoutes(raw: string | null): SavedRoute[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// Don't save blob: URLs (they die after page reload)
+function sanitizeRoutesForStorage(routes: SavedRoute[]): SavedRoute[] {
+  return routes.map((r) => ({
+    ...r,
+    points: r.points.map((p) => ({
+      ...p,
+      media: p.media?.filter((m) => !m.url.startsWith("blob:")),
+    })),
+  }));
+}
 
 // Demo routes
 const initialRoutes: SavedRoute[] = [
@@ -89,10 +113,19 @@ const initialRoutes: SavedRoute[] = [
 ];
 
 export const RoutesProvider = ({ children }: { children: ReactNode }) => {
-  const [routes, setRoutes] = useState<SavedRoute[]>(initialRoutes);
+  const [routes, setRoutes] = useState<SavedRoute[]>(() => {
+    const fromStorage = safeParseRoutes(localStorage.getItem(STORAGE_KEY));
+    return fromStorage ?? initialRoutes;
+  });
   const [currentRoute, setCurrentRoute] = useState<RoutePoint[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+
+  // Save routes to localStorage whenever they change
+  useEffect(() => {
+    const safe = sanitizeRoutesForStorage(routes);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
+  }, [routes]);
 
   const addRoute = useCallback((route: SavedRoute) => {
     setRoutes((prev) => [route, ...prev]);

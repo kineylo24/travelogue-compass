@@ -199,6 +199,8 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   const clearDestinationRoute = useCallback(() => {
     if (!mapRef.current) return;
 
+    const map = mapRef.current;
+
     setDestinationRoutes([]);
 
     if (destinationMarkerRef.current) {
@@ -206,12 +208,27 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
       destinationMarkerRef.current = null;
     }
 
-    if (mapRef.current.getLayer('destination-route')) {
-      mapRef.current.removeLayer('destination-route');
-    }
-    if (mapRef.current.getSource('destination-route')) {
-      mapRef.current.removeSource('destination-route');
-    }
+    // Important: remove ALL layers that use the source before removing the source.
+    // Otherwise Mapbox throws: "Source ... cannot be removed while layer ... is using it".
+    const safeRemoveLayer = (id: string) => {
+      try {
+        if (map.getLayer(id)) map.removeLayer(id);
+      } catch (e) {
+        console.warn("[MapboxMap] Failed to remove layer", id, e);
+      }
+    };
+
+    const safeRemoveSource = (id: string) => {
+      try {
+        if (map.getSource(id)) map.removeSource(id);
+      } catch (e) {
+        console.warn("[MapboxMap] Failed to remove source", id, e);
+      }
+    };
+
+    safeRemoveLayer("destination-route");
+    safeRemoveLayer("destination-route-casing");
+    safeRemoveSource("destination-route");
   }, []);
 
   // Get current route points

@@ -176,17 +176,58 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
   const searchPlaces = useCallback(async (query: string): Promise<{ name: string; address: string; coordinates: [number, number] }[]> => {
     try {
       console.log("[MapboxMap] Searching for:", query);
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=5&language=ru`;
+      
+      // Get user location for proximity search (important for POI results)
+      let proximityParam = "";
+      let bboxParam = "";
+      
+      if (userLocation) {
+        proximityParam = `&proximity=${userLocation[0]},${userLocation[1]}`;
+      }
+      
+      // First try Mapbox Search Box API (better for POI)
+      // If user is searching for food-related terms, use category search
+      const foodTerms = ['кафе', 'ресторан', 'еда', 'поесть', 'завтрак', 'обед', 'ужин', 'макдональдс', 'mcdonald', 'kfc', 'бургер', 'пицца', 'суши', 'бар', 'coffee', 'кофе', 'столовая'];
+      const isFoodSearch = foodTerms.some(term => query.toLowerCase().includes(term));
+      
+      // Use Mapbox Geocoding with types parameter prioritizing POI
+      // For food searches, use poi type first; otherwise include all types
+      const typesParam = isFoodSearch 
+        ? 'types=poi' 
+        : 'types=poi,address,place,locality';
+      
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=10&language=ru&${typesParam}${proximityParam}&country=ru,by,kz,uz,ua,ge,am,az`;
+      
+      console.log("[MapboxMap] Search URL:", url);
       const response = await fetch(url);
       const data = await response.json();
       
       console.log("[MapboxMap] Search results:", data);
       
-      const results = data.features?.map((item: any) => ({
+      // If no POI results, fallback to general search
+      let results = data.features?.map((item: any) => ({
         name: item.text || item.place_name.split(",")[0],
         address: item.place_name,
-        coordinates: [item.center[0], item.center[1]] as [number, number], // Mapbox returns [lng, lat], keep as is
+        coordinates: [item.center[0], item.center[1]] as [number, number],
+        category: item.properties?.category || null,
+        type: item.place_type?.[0] || 'unknown',
       })) || [];
+      
+      // If searching for food but got no POI results, try without type restriction
+      if (isFoodSearch && results.length === 0) {
+        console.log("[MapboxMap] No POI results, retrying without type restriction");
+        const fallbackUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=10&language=ru${proximityParam}`;
+        const fallbackResponse = await fetch(fallbackUrl);
+        const fallbackData = await fallbackResponse.json();
+        
+        results = fallbackData.features?.map((item: any) => ({
+          name: item.text || item.place_name.split(",")[0],
+          address: item.place_name,
+          coordinates: [item.center[0], item.center[1]] as [number, number],
+          category: item.properties?.category || null,
+          type: item.place_type?.[0] || 'unknown',
+        })) || [];
+      }
       
       console.log("[MapboxMap] Parsed results:", results);
       return results;
@@ -194,7 +235,7 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
       console.error("[MapboxMap] Search error:", error);
       return [];
     }
-  }, []);
+  }, [userLocation]);
 
   // Clear destination route
   const clearDestinationRoute = useCallback(() => {

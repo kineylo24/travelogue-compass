@@ -496,7 +496,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                 <Search size={18} className="text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Поиск места"
+                  placeholder="Кафе, рестораны, магазины..."
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -504,8 +504,9 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                       handleSearch(e.target.value);
                     }
                   }}
-                  className="bg-transparent flex-1 outline-none text-foreground placeholder:text-muted-foreground"
+                  className="bg-transparent flex-1 outline-none text-foreground placeholder:text-muted-foreground caret-primary"
                   autoFocus
+                  style={{ WebkitAppearance: 'none' }}
                 />
               </div>
               <button onClick={() => { setShowSearch(false); setSearchQuery(""); setSearchResults([]); }} className="p-2">

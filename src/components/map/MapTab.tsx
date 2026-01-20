@@ -489,8 +489,8 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
 
       {/* Search Modal */}
       {showSearch && (
-        <div className="fixed inset-0 bg-background z-50 animate-fade-in">
-          <div className="p-4 safe-area-inset-top">
+        <div className="fixed inset-0 bg-background z-[9999] animate-fade-in">
+          <div className="p-4 pt-12 safe-area-inset-top">
             <div className="flex items-center gap-3">
               <div className="flex-1 bg-muted rounded-xl px-4 py-3 flex items-center gap-2">
                 <Search size={18} className="text-muted-foreground" />

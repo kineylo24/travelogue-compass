@@ -21,6 +21,14 @@ export interface SavedRoute {
   distance: number; // in km
   duration: number; // in minutes
   thumbnail?: string;
+  
+  // New fields for route types and bundles
+  kind?: "segment" | "bundle";
+  source?: "recorded" | "directions";
+  parentBundleId?: string; // if segment is part of a bundle
+  childrenIds?: string[]; // for bundles: array of segment ids
+  isFavorite?: boolean;
+  createdAt?: number; // timestamp for filtering
 }
 
 interface RoutesContextType {

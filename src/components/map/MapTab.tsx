@@ -36,6 +36,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const [routePreference, setRoutePreference] = useState<RoutePreference>({ avoidTolls: false, useTraffic: true });
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveMode, setSaveMode] = useState<"recorded" | "directions">("recorded");
   const [routeName, setRouteName] = useState("");
   const [routeCity, setRouteCity] = useState("");
 
@@ -54,7 +55,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
     { id: "transit" as TransportType, icon: Bus, label: "Транспорт" },
   ];
 
-  const { stopRecording, startRecording, addMediaToPoint, updateRoute } = useRoutes();
+  const { stopRecording, startRecording, addMediaToPoint, updateRoute, addRoute } = useRoutes();
 
   const handleStartRoute = () => {
     console.log("[MapTab] start recording");
@@ -69,6 +70,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
   const handleEndRoute = () => {
     console.log("[MapTab] end recording (open save dialog)");
     setIsRouting(false);
+    setSaveMode("recorded");
     setShowSaveDialog(true);
   };
 
@@ -95,6 +97,54 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
     setShowSaveDialog(false);
     setRouteName("");
     setRouteCity("");
+  };
+
+  // Save directions route (built from Mapbox API, not GPS recorded)
+  const handleSaveDirectionsRoute = () => {
+    const geometry = mapRef.current?.getDestinationRouteGeometry();
+    
+    if (!geometry || geometry.coordinates.length < 2) {
+      toast("Не удалось сохранить маршрут", {
+        description: "Геометрия маршрута недоступна",
+      });
+      return;
+    }
+
+    // Convert coordinates to RoutePoints
+    const points = geometry.coordinates.map((coord, idx) => ({
+      id: `p-${Date.now()}-${idx}`,
+      coordinates: [coord[1], coord[0]] as [number, number], // Convert [lng, lat] to [lat, lng] for storage
+      timestamp: Date.now() + idx * 1000,
+    }));
+
+    const newRoute = {
+      id: `route-${Date.now()}`,
+      name: routeName || `${destination?.name || "Маршрут"} ${new Date().toLocaleDateString("ru-RU")}`,
+      city: routeCity || destination?.name?.split(",")[0] || "Маршрут",
+      date: new Date().toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+      transportType,
+      points,
+      distance: Math.round(geometry.distance * 100) / 100,
+      duration: geometry.duration,
+      kind: "segment" as const,
+      source: "directions" as const,
+      createdAt: Date.now(),
+    };
+
+    addRoute(newRoute);
+    
+    toast("Маршрут сохранён!", {
+      description: `${newRoute.name} добавлен в "Мои карты"`,
+    });
+    
+    setShowSaveDialog(false);
+    setRouteName("");
+    setRouteCity("");
+    handleClearDestination();
   };
 
   const handleSearch = useCallback(async (query: string) => {
@@ -336,7 +386,7 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                 <span className="font-semibold text-foreground">{destinationInfo.duration} мин</span>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-3">
               {transportOptions.map((option) => {
                 const Icon = option.icon;
                 const isActive = transportType === option.id;
@@ -354,6 +404,20 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
                 );
               })}
             </div>
+            
+            {/* Save this route button */}
+            <button
+              onClick={() => {
+                setSaveMode("directions");
+                setRouteName(destination.name);
+                setRouteCity(destination.address?.split(",")[1]?.trim() || "");
+                setShowSaveDialog(true);
+              }}
+              className="w-full py-3 rounded-xl bg-accent text-accent-foreground font-medium flex items-center justify-center gap-2"
+            >
+              <Flag size={18} />
+              Записать этот маршрут
+            </button>
           </div>
         </div>
       )}
@@ -507,7 +571,9 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
       <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Сохранить маршрут</DialogTitle>
+            <DialogTitle>
+              {saveMode === "directions" ? "Сохранить маршрут" : "Сохранить запись"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
@@ -532,13 +598,17 @@ const MapTab = ({ onViewRoute, viewingRoute, onBackFromRoute }: MapTabProps) => 
             </div>
             <div className="flex gap-2 pt-2">
               <button
-                onClick={() => setShowSaveDialog(false)}
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  setRouteName("");
+                  setRouteCity("");
+                }}
                 className="flex-1 py-3 rounded-xl bg-muted text-foreground font-medium"
               >
                 Отмена
               </button>
               <button
-                onClick={handleSaveRoute}
+                onClick={saveMode === "directions" ? handleSaveDirectionsRoute : handleSaveRoute}
                 className="flex-1 py-3 rounded-xl gradient-primary text-primary-foreground font-medium flex items-center justify-center gap-2"
               >
                 <Check size={18} />

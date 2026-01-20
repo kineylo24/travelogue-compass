@@ -39,6 +39,7 @@ export interface MapboxMapRef {
   searchPlaces: (query: string) => Promise<{ name: string; address: string; coordinates: [number, number] }[]>;
   clearDestinationRoute: () => void;
   getRoutePoints: () => RoutePoint[];
+  getDestinationRouteGeometry: () => { coordinates: [number, number][]; distance: number; duration: number } | null;
 }
 
 const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
@@ -236,28 +237,6 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
     return routePointsRef.current;
   }, []);
 
-  // Expose methods via ref
-  useImperativeHandle(ref, () => ({
-    searchPlaces,
-    clearDestinationRoute,
-    getRoutePoints,
-  }), [searchPlaces, clearDestinationRoute, getRoutePoints]);
-
-  // Calculate approximate distance between two [lng, lat] points in km
-  const getApproxDistanceKm = useCallback((from: [number, number], to: [number, number]) => {
-    const R = 6371; // Earth radius in km
-    const dLat = ((to[1] - from[1]) * Math.PI) / 180;
-    const dLon = ((to[0] - from[0]) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((from[1] * Math.PI) / 180) *
-        Math.cos((to[1] * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }, []);
-
   /**
    * Directions API sometimes returns a full route geometry (route.geometry),
    * but in some cases we only reliably have step geometries.
@@ -287,6 +266,50 @@ const MapboxMap = forwardRef<MapboxMapRef, MapboxMapProps>(({
 
     if (coords.length < 2) return null;
     return { type: "LineString", coordinates: coords } as GeoJSON.LineString;
+  }, []);
+
+  // Get destination route geometry (for saving directions routes)
+  const getDestinationRouteGeometry = useCallback((): { coordinates: [number, number][]; distance: number; duration: number } | null => {
+    if (destinationRoutes.length === 0) return null;
+    
+    const idx = Math.min(
+      Math.max(selectedDestinationRouteIndex ?? 0, 0),
+      destinationRoutes.length - 1
+    );
+    
+    const route = destinationRoutes[idx];
+    const geometry = extractRouteGeometry(route);
+    
+    if (!geometry) return null;
+    
+    return {
+      coordinates: geometry.coordinates as [number, number][],
+      distance: route.distance / 1000, // km
+      duration: Math.ceil(route.duration / 60), // minutes
+    };
+  }, [destinationRoutes, selectedDestinationRouteIndex, extractRouteGeometry]);
+
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    searchPlaces,
+    clearDestinationRoute,
+    getRoutePoints,
+    getDestinationRouteGeometry,
+  }), [searchPlaces, clearDestinationRoute, getRoutePoints, getDestinationRouteGeometry]);
+
+  // Calculate approximate distance between two [lng, lat] points in km
+  const getApproxDistanceKm = useCallback((from: [number, number], to: [number, number]) => {
+    const R = 6371; // Earth radius in km
+    const dLat = ((to[1] - from[1]) * Math.PI) / 180;
+    const dLon = ((to[0] - from[0]) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((from[1] * Math.PI) / 180) *
+        Math.cos((to[1] * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
   }, []);
 
   // Fetch route variants to destination using Mapbox Directions API
